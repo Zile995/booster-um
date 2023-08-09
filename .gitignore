@@ -1,0 +1,15 @@
+# Ignore makepkg files and dirs
+pkg/
+src/
+booster-um/
+
+# Ignore pacman packages
+*.pkg.tar.zst
+
+# Do not ignore PKGBUILD files
+!PKGBUILD
+!*.install
+
+# Do not ignore common files
+!*.diff
+!*.patch

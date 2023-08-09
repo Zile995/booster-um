@@ -21,15 +21,17 @@ pkgver() {
 package() {
   cd "$pkgname"
 
+  # Install the booster-um
+  install -Dm0755 booster-um -t "${pkgdir}/usr/bin"
+
   # Install the scripts
-  install -Dm0755 booster-um         -t "${pkgdir}/usr/bin"
-  install -Dm0755 booster-um-remove  -t "${pkgdir}/usr/share/libalpm/scripts"
-  install -Dm0755 booster-um-install -t "${pkgdir}/usr/share/libalpm/scripts"
+  install -Dm0755 scripts/booster-um-remove  -t "${pkgdir}/usr/share/libalpm/scripts"
+  install -Dm0755 scripts/booster-um-install -t "${pkgdir}/usr/share/libalpm/scripts"
 
   # Install the hooks
-  install -Dm0644 90-booster-um-install.hook      -t "${pkgdir}/usr/share/libalpm/hooks"
-  install -Dm0644 60-booster-um-remove.hook       -t "${pkgdir}/usr/share/libalpm/hooks"
-  install -Dm0644 60-booster-um-ucode-remove.hook -t "${pkgdir}/usr/share/libalpm/hooks"
+  install -Dm0644 hooks/90-booster-um-install.hook      -t "${pkgdir}/usr/share/libalpm/hooks"
+  install -Dm0644 hooks/60-booster-um-remove.hook       -t "${pkgdir}/usr/share/libalpm/hooks"
+  install -Dm0644 hooks/60-booster-um-ucode-remove.hook -t "${pkgdir}/usr/share/libalpm/hooks"
 
   # Install the LICENSE
   install -Dm0644 LICENSE -t "${pkgdir}/usr/share/licenses/${pkgname}"

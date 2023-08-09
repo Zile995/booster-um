@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+set -e
+
+all=0
+kernels=()
+
+while read -r line; do
+  if [[ ${line} != usr/lib/modules/* ]]; then
+    all=1
+    break
+  fi
+
+  kernels+=("/${line%/vmlinuz}")
+done
+
+# Regenerate all UKI
+if [ "${all}" -eq "1" ]; then
+  booster-um -g --all-uki
+  exit
+fi
+
+for kernel in "${kernels[@]}"; do
+  if ! pacman -Qqo "${kernel}/pkgbase" > /dev/null 2>&1; then
+    # if pkgbase does not belong to any package then skip this kernel
+    continue
+  fi
+  read -r pkgbase < "${kernel}/pkgbase"
+  booster-um -g "$pkgbase"
+done

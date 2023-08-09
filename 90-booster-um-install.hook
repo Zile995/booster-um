@@ -1,0 +1,13 @@
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
+Target = boot/*-ucode.img
+Target = usr/lib/modules/*/vmlinuz
+Target = usr/lib/modules/*/extramodules/*
+
+[Action]
+Description = Updating UKI files...
+When = PostTransaction
+Exec = /usr/share/libalpm/scripts/booster-um-install
+NeedsTargets

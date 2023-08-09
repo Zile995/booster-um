@@ -1,7 +1,7 @@
 # Ignore makepkg files and dirs
 pkg/
 src/
-booster-um/
+booster-um-git/
 
 # Ignore pacman packages
 *.pkg.tar.zst

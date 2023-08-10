@@ -99,8 +99,8 @@ _generate_uki() {
     --output=${UKI} &>/dev/null || :
 
   if ! _sbctl_exists; then return; fi
-  # Sbctl hook should sign UKI if it already exists
-  [[ -n "$(sbctl list-files | grep -w "$UKI" 2> /dev/null)" ]] && return
+  # Sbctl hook should sign the UKI file if it already exists in database
+  [[ "$(sbctl list-files --json | jq -r '.[].file' | grep -w "$UKI")" ]] && return
 
   sbctl sign --save "$UKI"
 }

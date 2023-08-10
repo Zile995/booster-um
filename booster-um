@@ -95,13 +95,12 @@ _generate_uki() {
   _check_pkgbase "$pkgbase"
 
   # systemd-ukify paths
-  local UCODE_OPT VMLINUZ INITRAMFS UKI
+  local UCODE VMLINUZ INITRAMFS UKI
 
   # ucode
   mapfile -d '' ucodes < <(find /boot -name '*-ucode.img' -type f -print0)
   [[ ${#ucodes[@]} -gt 1 ]] && echo "Multiple microcode images detected, please use one!" && exit 1
-  UCODE_OPT="${ucodes[0]:-""}"
-  [[ -n "$UCODE_OPT" ]] && UCODE_OPT="--initrd=$UCODE_OPT"
+  UCODE="${ucodes[0]}"
 
   # vmlinuz
   VMLINUZ="/boot/vmlinuz-${pkgbase}"
@@ -119,11 +118,11 @@ _generate_uki() {
   UKI="${EFI_DIR}/arch-${pkgbase}.efi"
 
   /usr/lib/systemd/ukify build \
-    --linux="${VMLINUZ}" "${UCODE_OPT}" \
+    --linux="${VMLINUZ}" ${UCODE:+"--initrd=""$UCODE"} \
     --initrd="${INITRAMFS}" \
     --cmdline=@"${CMDLINE}" \
     --splash="${SPLASH}" \
-    --output="${UKI}" &>/dev/null || :
+    --output="${UKI}"
 
   # Retrun if sbctl is not installed
   if ! _sbctl_exists; then return; fi

@@ -6,4 +6,4 @@ Target = boot/*-ucode.img
 [Action]
 Description = Updating UKI files without microcode...
 When = PostTransaction
-Exec = /usr/bin/booster-um -g --all-uki
+Exec = /usr/bin/booster-um -a

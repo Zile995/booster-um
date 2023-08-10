@@ -5,28 +5,40 @@ set -e
 main() {
   [ $EUID -ne 0 ] && echo "Please run booster-um as root." >&2 && exit 1
 
-  local arg="$1"
-  local esp_path=$(bootctl --print-esp-path)
+  local arg esp_path
+  arg="$1"
+  esp_path="$(bootctl --print-esp-path)"
 
   CMDLINE=/etc/kernel/cmdline
   EFI_DIR="${esp_path}/EFI/Linux"
   SPLASH=/usr/share/systemd/bootctl/splash-arch.bmp
 
-  #Trigger any potential automounts
+  # Trigger any potential automounts
   stat -- /boot "$esp_path" &>/dev/null || :
 
   case "$arg" in
+    -a)
+      # Generate UKI files for all kernels
+      generate_all_uki
+      ;;
     -g)
+      # Generate UKI file for specific kernel package name
+      # --all argument regenerates initramfs and vmlinuz files for specific kernel package name
       generate "$2" "$3"
       ;;
     -r)
+      # Remove UKI file for specific kernel package name
+      # --all argument removes initramfs and vmlinuz files for specific kernel package name
       remove "$2" "$3"
       ;;
     -R)
-      remove_all_kernel_files
+      # Remove booster, vmlinuz and UKI files for all kernels
+      # -F argument will remove mentioned files + initramfs-*.img files and whole esp/EFI/Linux dir
+      remove_all_files "$2"
       ;;
     -G)
-      regenerate_all_kernel_files
+      # Regenerate booster, vmlinuz and UKI files for all kernels
+      regenerate_all_files
       ;;
      *)
       echo "Unknown parameter passed."
@@ -35,29 +47,44 @@ main() {
 }
 
 _sbctl_exists() {
-  command -v -- sbctl 2>&1 > /dev/null
+  command -v -- sbctl > /dev/null 2>&1
 }
 
 _check_pkgbase() {
   local pkgbase="$1"
-  if [[ -n "$(pacman -Qq -- "${pkgbase}" 2>&1 > /dev/null)" || -z "${pkgbase}" ]]; then
+  if ( ! pacman -Qq -- "${pkgbase}" > /dev/null 2>&1 ) || [[ -z "${pkgbase}" ]]; then
     echo "Invalid kernel package name." && exit 1
   fi
 }
 
+# -g Maing generate function
 generate() {
   local arg="$1"
   local pkgbase="$2"
 
   case "$arg" in
-    --uki)
-      _generate_uki "$pkgbase"
-      ;;
-    --all-uki)
-      _regenerate_all_kernel_uki
+    --all)
+      _regenerate_kernel_files "$pkgbase"
       ;;
     *)
       _generate_uki "$1"
+      ;;
+  esac
+}
+
+# -r Main remove function
+remove() {
+  local arg="$1"
+  local pkgbase="$2"
+
+  case "$arg" in
+    --all)
+      # Remove known booster initramfs, vmlinuz and UKI files for specific kernel package name
+      _remove_kernel_files "$pkgbase"
+      ;;
+    *)
+      # Remove UKI for specific kernel package name
+      _remove_uki "$1"
       ;;
   esac
 }
@@ -92,20 +119,46 @@ _generate_uki() {
   UKI="${EFI_DIR}/arch-${pkgbase}.efi"
 
   /usr/lib/systemd/ukify build \
-    --linux=${VMLINUZ} ${UCODE_OPT} \
-    --initrd=${INITRAMFS} \
-    --cmdline=@${CMDLINE} \
-    --splash=${SPLASH} \
-    --output=${UKI} &>/dev/null || :
+    --linux="${VMLINUZ}" "${UCODE_OPT}" \
+    --initrd="${INITRAMFS}" \
+    --cmdline=@"${CMDLINE}" \
+    --splash="${SPLASH}" \
+    --output="${UKI}" &>/dev/null || :
 
+  # Retrun if sbctl is not installed
   if ! _sbctl_exists; then return; fi
-  # Sbctl hook should sign the UKI file if it already exists in database
-  [[ "$(sbctl list-files --json | jq -r '.[].file' | grep -w "$UKI")" ]] && return
 
+  # Sbctl hook should sign the UKI file if it already exists in database
+  if sbctl list-files --json | jq -r '.[].file' | grep -qw "$UKI"; then return; fi;
+
+  # Sign UKI file with sbctl
   sbctl sign --save "$UKI"
 }
 
-_regenerate_all_kernel_uki() {
+# Regenerates booster initramfs, vmlinuz and UKI files for specified kernel package name
+_regenerate_kernel_files() {
+  local input_pkgbase="$1"
+  _check_pkgbase "$input_pkgbase"
+
+  mapfile -d '' kernels < <(find /usr/lib/modules -maxdepth 1 -type d ! -name "modules" -print0)
+
+  for kernel in "${kernels[@]}"; do
+    if ! pacman -Qqo "${kernel}/pkgbase" > /dev/null 2>&1; then
+      # if pkgbase does not belong to any package then skip this kernel
+      continue
+    fi
+    read -r pkgbase < "${kernel}/pkgbase"
+    if [ "$pkgbase" = "$input_pkgbase" ]; then
+      booster build --force --kernel-version "${kernel##/usr/lib/modules/}" "/boot/booster-${pkgbase}.img"
+      install -Dm644 "${kernel}/vmlinuz" "/boot/vmlinuz-${pkgbase}"
+      _generate_uki "$pkgbase"
+      break
+    fi
+  done
+}
+
+# Generates UKI files for all installed kernels
+generate_all_uki() {
   # find out all installed kernels
   mapfile -d '' kernels < <(find /usr/lib/modules -maxdepth 1 -type d ! -name "modules" -print0)
 
@@ -119,57 +172,84 @@ _regenerate_all_kernel_uki() {
   done
 }
 
-regenerate_all_kernel_files() {
+# Regenerates booster initramfs, vmlinuz and UKI files for all kernels
+regenerate_all_files() {
   echo "Regenerating all booster and vmlinuz files..." >&2
   /usr/lib/booster/regenerate_images
   echo "Regenerating all UKI files..." >&2
-  _regenerate_all_kernel_uki
+  generate_all_uki
   if _sbctl_exists; then sbctl sign-all -g; fi
 }
 
-remove() {
+# Removes all known booster initramfs, vmlinuz and UKI files
+# With -F argument it removes all initramfs-*, booster-*, vmlinuz-* files and esp/EFI/Linux dir
+remove_all_files() {
   local arg="$1"
-  local pkgbase="$2"
 
   case "$arg" in
-    --all)
-      _remove_all "$pkgbase"
+    -F)
+      echo "Removing all initramfs-*, booster-*, vmlinuz-* files and ${EFI_DIR} dir..." >&2
+
+      # Remove all initramfs-*, booster-*, vmlinuz-* files
+      rm -f /boot/{initramfs,booster,vmlinuz}*
+
+      # Remove esp/EFI/Linux dir and all files from sbctl database if they exist
+      _remove_efi_dir
       ;;
-    --initrd)
-      _remove_initrd "$pkgbase"
-      ;;
-    --uki)
-      _remove_uki "$pkgbase"
-      ;;
-    --vmlinuz)
-      _remove_vmlinuz "$pkgbase"
+    "")
+      echo "Removing all booster, vmlinuz and UKI files..." >&2
+
+      # Remove all vmlinuz and initramfs
+      rm -f /boot/{booster,vmlinuz}-*
+
+      # Remove all known UKI files from esp/EFI/Linux dir
+      _remove_all_uki
       ;;
     *)
-      _remove_uki "$1"
+      echo "Unknown parameter passed."
       ;;
   esac
 }
 
-remove_all_kernel_files() {
+# Removes all known UKI files from esp/EFI/Linux dir
+_remove_all_uki() {
   shopt -s nullglob
-
-  echo "Removing all booster, vmlinuz and UKI files..." >&2
 
   # Store all UKI files in array
   local uki_files=("${EFI_DIR}"/arch-*.efi)
 
-  # Remove all vmlinz and initramfs
-  rm -f /boot/{booster,vmlinuz}-{.img,*}
-
   for uki_file in "${uki_files[@]}"; do
     rm -f "$uki_file"
-    # Remove a;; UKI file from sbctl database
+    # Remove the UKI file from sbctl database
     if _sbctl_exists; then sbctl remove-file "$uki_file"; fi
   done
 
   shopt -u nullglob
 }
 
+_remove_efi_dir() {
+  shopt -s nullglob
+
+  # Store all EFI files in array
+  local efi_files=("${EFI_DIR}"/*.efi)
+
+  if _sbctl_exists; then
+    for efi_file in "${efi_files[@]}"; do
+      # If EFI file exists in sbctl database, remove it
+      if sbctl list-files --json | jq -r '.[].file' | grep -qw "$efi_file"; then
+        # Remove EFI file from sbctl database
+        sbctl remove-file "$uki_file"
+      fi
+    done
+  fi
+
+  # Remove esp/EFI/Linux dir
+  rm -rf "$EFI_DIR"
+
+  shopt -u nullglob
+}
+
+# Removes UKI file for specified kernel
 _remove_uki() {
   local pkgbase="$1"
   _check_pkgbase "$pkgbase"
@@ -184,33 +264,20 @@ _remove_uki() {
   if _sbctl_exists; then sbctl remove-file "$uki"; fi
 }
 
-_remove_initrd() {
+# Removes known booster, vmlinuz and UKI files for specified kernel
+_remove_kernel_files() {
   local pkgbase="$1"
-  _check_pkgbase "$pkgbase"
+  _remove_uki "$pkgbase"
 
-  # initramfs
-  local initrd="/boot/booster-${pkgbase}.img"
+  # initramfs and vmlinuz
+  local vmlinuz="/boot/vmlinuz-${pkgbase}"
+  local initramfs="/boot/booster-${pkgbase}.img"
 
   # Remove booster initramfs file
-  rm -f "$initrd"
-}
-
-_remove_vmlinuz() {
-  local pkgbase="$1"
-  _check_pkgbase "$pkgbase"
-
-  # vmlinuz
-  local vmlinuz="/boot/vmlinuz-${pkgbase}"
+  rm -f "$initramfs"
 
   # Remove vmlinuz file
   rm -f "$vmlinuz"
-}
-
-_remove_all() {
-  local pkgbase="$1"
-  _remove_uki "$pkgbase"
-  _remove_initrd "$pkgbase"
-  _remove_vmlinuz "$pkgbase"
 }
 
 main "$@"; exit

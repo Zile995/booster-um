@@ -3,8 +3,10 @@ Type = Path
 Operation = Install
 Operation = Upgrade
 Target = boot/*-ucode.img
+Target = usr/bin/booster
+Target = usr/lib/booster/*
+Target = usr/lib/firmware/*
 Target = usr/lib/modules/*/vmlinuz
-Target = usr/lib/modules/*/extramodules/*
 
 [Action]
 Description = Updating UKI files...

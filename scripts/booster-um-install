@@ -16,7 +16,7 @@ done
 
 # Generate UKI files for all kernels
 if [ "${all}" -eq "1" ]; then
-  booster-um -a
+  booster-um -G .
   exit
 fi
 
@@ -27,6 +27,8 @@ for kernel in "${kernels[@]}"; do
   fi
   read -r pkgbase < "${kernel}/pkgbase"
 
+  uname="${kernel##/usr/lib/modules/}"
+
   # Genearate UKI file for updated kernel
-  booster-um -g "$pkgbase"
+  booster-um -u "$pkgbase" "$uname"
 done

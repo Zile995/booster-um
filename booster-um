@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -x
+set -e
 
 NC='\033[0m' # No Color
 RED='\033[0;91m' # Red color
@@ -81,7 +81,7 @@ Usage: $command_name [OPTIONS] <package>
 
 Generate or remove booster UKI files.
 
-Help Options:
+Help options:
     -h, --help  Show this help message
 
 Generate options:

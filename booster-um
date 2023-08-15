@@ -107,10 +107,6 @@ _sbctl_exists() {
 
 _check_pkgbase() {
   local pkgbase="$1"
-  if ( ! pacman -Qq -- "${pkgbase}" > /dev/null 2>&1 ) || [[ -z "${pkgbase}" ]]; then
-    echo -e "${RED}Invalid package name.${NC}" && exit 1
-  fi
-
   if ! printf '%s\0' "${pkgbases[@]}" | grep -Fxqz -- "$pkgbase"; then
     echo -e "${RED}Invalid kernel package name.${NC}" && exit 1
   fi
@@ -127,6 +123,8 @@ _generate_uki() {
 
   # systemd-ukify paths
   local UCODE VMLINUZ INITRAMFS UKI
+
+  echo -e "${YELLOW}==>${NC} Generating UKI for ${pkgbase}..." >&2
 
   # ucode
   mapfile -d '' ucodes < <(find /boot -name '*-ucode.img' -type f -print0)
@@ -212,9 +210,8 @@ _generate_all_uki() {
 # Generates booster initramfs, vmlinuz and UKI files for all kernels
 _generate_all_files() {
   local sign="$1"
-  echo -e "${YELLOW}==>${NC} Regenerating all booster and vmlinuz files..." >&2
   /usr/lib/booster/regenerate_images
-  echo -e "${YELLOW}==>${NC} Regenerating all UKI files..." >&2
+  echo -e "${YELLOW}::${NC} Generating UKI files for all kernels..." >&2
   _generate_all_uki "$sign"
 }
 
@@ -247,6 +244,7 @@ _remove_all_files() {
       echo -e "${RED}==>${NC} Unknown parameter '$arg' passed."
       ;;
   esac
+  echo -e "${GREEN}==>${NC} Done." >&2
 }
 
 # Removes all known UKI files from esp/EFI/Linux dir

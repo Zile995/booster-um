@@ -143,7 +143,7 @@ _generate_uki() {
   [[ ! -e "$INITRAMFS" ]] && echo -e "${RED}==>${NC} Unable to find ${RED}booster-${pkgbase}.img${NC}." && exit
 
   # cmdline
-  [[ ! -e "$CMDLINE" ]] && touch "$CMDLINE"
+  [[ ! -e "$CMDLINE" ]] && cp /proc/cmdline "$CMDLINE"
 
   # UKI file path
   [[ ! -e "$EFI_DIR" ]] && mkdir -p "$EFI_DIR"

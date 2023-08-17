@@ -6,6 +6,7 @@ Target = boot/*-ucode.img
 Target = usr/bin/booster
 Target = usr/lib/booster/*
 Target = usr/lib/firmware/*
+Target = usr/src/*/dkms.conf
 Target = usr/lib/modules/*/vmlinuz
 
 [Action]

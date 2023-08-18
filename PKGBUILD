@@ -7,7 +7,8 @@ pkgdesc="Booster UKI Manager - Simple bash script to manage booster initramfs, v
 url="https://github.com/Zile995/booster-um"
 arch=('any')
 license=('GPL3')
-depends=('booster' 'jq' 'systemd' 'systemd-ukify')
+backup=(etc/booster-um.yaml)
+depends=('booster' 'go-yq' 'systemd' 'systemd-ukify')
 optdepends=("sbctl: Sign UKI files")
 makedepends=('git')
 source=("${pkgname}::git+$url")
@@ -20,6 +21,9 @@ pkgver() {
 
 package() {
   cd "$pkgname"
+
+  # Create config file
+  touch "${pkgdir}/etc/booster-um.yaml"
 
   # Install the booster-um
   install -Dm0755 booster-um -t "${pkgdir}/usr/bin"

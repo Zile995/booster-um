@@ -2,14 +2,16 @@
 
 set -e
 
-NC='\033[0m' # No Color
-RED='\033[0;91m' # Red color
-GREEN='\033[0;32m' # Green color
-YELLOW='\033[0;33m' # Yellow color
+# Colors
+W='\e[1;39m' # White
+R='\033[1;31m' # Red
+G='\033[1;32m' # Green
+B='\033[1;34m' # Blue
+Y='\033[1;33m' # Yellow
+NC='\033[0m' # No color
 
 main() {
-  local arg
-  arg="$1"
+  local arg="$1"
 
   case ${arg} in
     -h|--help)
@@ -18,28 +20,28 @@ main() {
       ;;
     *)
       [ $EUID -ne 0 ] && \
-        echo -e "${RED}==>${NC} Please run booster-um as ${RED}root${NC}." >&2 && exit 1
+        echo -e "${R}==>${NC} Please run booster-um as ${R}root${NC}." >&2 && exit 1
       ;;
   esac
 
+  # ESP path
   local esp_path
   esp_path="$(bootctl --print-esp-path)"
+
+  # UKI file paths
+  uki_paths=()
 
   # Common paths
   CMDLINE=/etc/kernel/cmdline
   EFI_DIR="${esp_path}/EFI/Linux"
   SPLASH=/usr/share/systemd/bootctl/splash-arch.bmp
 
-  # Find out all installed kernel
-  kernels=()
-  readarray -t -O "${#kernels[@]}" kernels < <(find /usr/lib/modules \
-    -maxdepth 1 \
-    ! -path '*/\.*' -type d \
-    ! -name 'modules' \
-    -exec sh -c 'for path; do if pacman -Qqo "$path/pkgbase" > /dev/null 2>&1; then echo $path; fi; done' _ {} +)
+  # Configs
+  CONFIG=/etc/booster-um.yaml
+  BOOSTER_CONFIG=/etc/booster.yaml
 
-  # Generate array of valid kernel package names
-  readarray -t pkgbases < <(printf '%s/pkgbase\n' "${kernels[@]}" | xargs -I {} cat {})
+  # Find all installed kernels
+  _find_kernels
 
   # Trigger any potential automounts
   stat -- /boot "$esp_path" &>/dev/null || :
@@ -65,11 +67,12 @@ main() {
     -u)
       # Generate UKI on kernel update
       # Do not sign the UKI file if it exists in the sbctl database
+      _generate_fallback_initramfs "$2" "$3"
       _generate_uki "$2" "$3" .
       ;;
     *)
-      echo -e "${RED}==>${NC} Unknown parameter '$arg' passed."
-      show_help >&2 && exit 1
+      echo -e "${R}==>${NC} Unknown parameter ${R}$arg${NC} passed." >&2
+      show_help && exit 1
       ;;
   esac
 }
@@ -101,75 +104,123 @@ Examples: $command_name -g linux
 EOF
 }
 
+_in_db() {
+  sbctl list-files --json | yq -r '.[].file' | grep -qw "$1"
+}
+
+# Check if sbctl command exists
 _sbctl_exists() {
   command -v -- sbctl > /dev/null 2>&1
 }
 
+# Checks if the package name is actually a kernel package name
 _check_pkgbase() {
   local pkgbase="$1"
-  if ! printf '%s\0' "${pkgbases[@]}" | grep -Fxqz -- "$pkgbase"; then
-    echo -e "${RED}Invalid kernel package name.${NC}" && exit 1
+  if ! printf '%s\0' "${pkgbases[@]}" | grep -Fqxz -- "$pkgbase"; then
+    echo -e "${R}Invalid kernel package name.${NC}" >&2 && exit 1
   fi
 }
 
-# Generate
-_generate_uki() {
-  # pkgbase
-  local pkgbase="$1"
-  _check_pkgbase "$pkgbase"
+# Find out all package names of installed kernels
+_find_kernels() {
 
-  local uname="$2"
+  kernels=()
+  readarray -t -O "${#kernels[@]}" kernels < <(find /usr/lib/modules \
+    -maxdepth 1 \
+    ! -path '*/\.*' -type d \
+    ! -name 'modules' \
+    -exec sh -c 'for path; do if pacman -Qqo -- "$path/pkgbase" > /dev/null 2>&1; then echo $path; fi; done' _ {} +)
+
+  # Generate array of valid kernel package names
+  readarray -t pkgbases < <(printf '%s/pkgbase\n' "${kernels[@]}" | xargs -I {} cat {})
+}
+
+# Checks if the creation of universal images is enabled
+_is_universal() {
+  [[ ! -e "$BOOSTER_CONFIG" ]] && return 1
+  yq '.universal == true' "$BOOSTER_CONFIG" | grep -Fqwx -- 'true'
+}
+
+# Checks if the booster-um should always generate a fallback UKI
+_should_generate_fallback() {
+  [[ ! -e "$CONFIG" ]] && return 1
+  yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true'
+  if [[ $? -eq 0 ]] && ! _is_universal; then
+    return
+  fi;
+  false
+}
+
+# Basic function, generates one UKI
+_generate_uki() {
+  # arguments
+  local pkgbase="$1"
   local sign="$3"
 
   # systemd-ukify paths
-  local UCODE VMLINUZ INITRAMFS UKI
+  local UCODE UNAME VMLINUZ UKI
+  UNAME="$2"
 
-  echo -e "${YELLOW}==>${NC} Generating UKI for ${pkgbase}..." >&2
+  echo -e "${B}==>${NC} Generating UKI for ${G}${pkgbase}${NC}..."
 
   # ucode
   mapfile -d '' ucodes < <(find /boot -name '*-ucode.img' -type f -print0)
-  [[ ${#ucodes[@]} -gt 1 ]] && echo "${RED}==>${NC} Mutlitple microcode images detected, please use one!" && exit 1
+  [[ ${#ucodes[@]} -gt 1 ]] && echo "${R}==>${NC} Mutlitple microcode images detected, please use one!" >&2 && exit 1
   UCODE="${ucodes[0]}"
 
   # vmlinuz
   VMLINUZ="/boot/vmlinuz-${pkgbase}"
   [[ ! -e "$VMLINUZ" ]] && {
-    echo -e "${RED}==>${NC} Unable to find compressed kernel image, ${RED}vmlinuz-${pkgbase}${NC}"
-    echo -e "${RED}==>${NC} Regenerate kernel files with ${GREEN}booster-um -g ${pkgbase}${NC} or use ${GREEN}booster-um -G${NC} to regenerate files for all kernels"
+    echo -e "${R}==>${NC} Unable to find compressed kernel image, ${R}vmlinuz-${pkgbase}${NC}" >&2
+    echo -e "${R}==>${NC} Regenerate kernel files with ${G}booster-um -g ${pkgbase}${NC} or use ${G}booster-um -G${NC} to regenerate files for all kernels" >&2
   } && exit 1
 
   # initramfs
-  INITRAMFS="/boot/booster-${pkgbase}.img"
-  [[ ! -e "$INITRAMFS" ]] && echo -e "${RED}==>${NC} Unable to find ${RED}booster-${pkgbase}.img${NC}." && exit
+  local initramfs=( "/boot/booster-${pkgbase}.img" )
+  if _should_generate_fallback; then
+    initramfs+=( "/boot/booster-${pkgbase}-fallback.img" )
+  fi
 
   # cmdline
   [[ ! -e "$CMDLINE" ]] && cp /proc/cmdline "$CMDLINE"
 
   # UKI file path
   [[ ! -e "$EFI_DIR" ]] && mkdir -p "$EFI_DIR"
-  UKI="${EFI_DIR}/arch-${pkgbase}.efi"
+  local uki="${EFI_DIR}/arch-${pkgbase}"
 
-  /usr/lib/systemd/ukify build \
-    --uname="${uname}" \
-    --linux="${VMLINUZ}" ${UCODE:+"--initrd=$UCODE"} \
-    --initrd="${INITRAMFS}" \
-    --cmdline=@"${CMDLINE}" \
-    --splash="${SPLASH}" \
-    --output="${UKI}"
+  for initrd_id in "${!initramfs[@]}"; do
+    local INITRD="${initramfs[initrd_id]}"
+    [[ ! -e "$INITRD" ]] && echo -e "${R}==>${NC} Unable to find ${INITRD}${NC}." >&2 && exit 1
+
+    # Set UKI fallback path
+    [[ initrd_id -gt 0 ]] && uki="${uki}-fallback"
+
+    # Set UKI path
+    UKI="${uki}.efi"
+
+    # Build UKI file
+    /usr/lib/systemd/ukify build \
+      --uname="${UNAME}" \
+      --linux="${VMLINUZ}" ${UCODE:+"--initrd=$UCODE"} \
+      --initrd="${INITRD}" \
+      --cmdline=@"${CMDLINE}" \
+      --splash="${SPLASH}" \
+      --output="${UKI}" | tail -n 1
+
+    # Retrun if sbctl is not installed
+    if ! _sbctl_exists; then return; fi
+
+    if [ "${sign:=-s}" != "-s" ]; then
+      # Sbctl hook should sign the UKI file if it already exists in database
+      if _in_db "$UKI"; then continue; fi
+    fi
+
+    # Sign UKI file with sbctl
+    sbctl sign --save "$UKI" || :
+  done
 
   # Remove the leftovers (vmlinuz and booster initramfs)
-  rm -f "$VMLINUZ" "$INITRAMFS"
-
-  # Retrun if sbctl is not installed
-  if ! _sbctl_exists; then return; fi
-
-  if [ "${sign:=-s}" != "-s" ]; then
-    # Sbctl hook should sign the UKI file if it already exists in database
-    if sbctl list-files --json | jq -r '.[].file' | grep -qw "$UKI"; then return; fi
-  fi
-
-  # Sign UKI file with sbctl
-  sbctl sign --save "$UKI" || :
+  rm -f "$VMLINUZ" "${initramfs[@]}"
 }
 
 # Generates UKI file for specified kernel package name
@@ -179,15 +230,12 @@ _generate_kernel_uki() {
 
   local sign="$2"
 
+  # Get the index of pkgbase
   index="$(printf "%s\n" "${pkgbases[@]}" | grep -n "^${pkgbase}$" | sed "s/:${pkgbase}//")"
-  local kernel="${kernels[$(($index-1))]}"
-  local uname="${kernel##/usr/lib/modules/}"
+  local kernel="${kernels[$((index-1))]}"
 
   # Generate booster initramfs
-  booster build --force --kernel-version "$uname" "/boot/booster-${pkgbase}.img"
-
-  # Install the vmlinuz
-  install -Dm644 "${kernel}/vmlinuz" "/boot/vmlinuz-${pkgbase}"
+  _generate_initramfs "$kernel"
 
   # Generate and sign UKI file
   _generate_uki "$pkgbase" "$uname" "$sign"
@@ -207,11 +255,51 @@ _generate_all_uki() {
   done
 }
 
+_regenerate_images() {
+  # Generate initramfs and fallback initramfs
+  for kernel in "${kernels[@]}"; do
+    _generate_initramfs "$kernel" &
+  done
+
+  # Wait for all background jobs
+  wait
+}
+
+# Generate initramfs for specified kernel path
+_generate_initramfs() {
+  local kernel="$1"
+
+  read -r pkgbase < "${kernel}/pkgbase"
+  uname="${kernel##/usr/lib/modules/}"
+
+  echo -e "${B}==>${NC} Generating initramfs for ${G}${pkgbase}${NC}..."
+
+  # Install the vmlinuz
+  install -Dm644 "${kernel}/vmlinuz" "/boot/vmlinuz-${pkgbase}"
+
+  # Generate initramfs
+  booster build --force --kernel-version "$uname" "/boot/booster-${pkgbase}.img"
+
+  # Generate fallback initramfs
+  _generate_fallback_initramfs "$pkgbase" "$uname"
+}
+
+# Generates fallback initramfs
+_generate_fallback_initramfs() {
+  local uname pkgbase
+  pkgbase="$1"
+  uname="$2"
+  if _should_generate_fallback; then
+    booster build --force --universal --kernel-version "$uname" "/boot/booster-${pkgbase}-fallback.img"
+  fi
+}
+
 # Generates booster initramfs, vmlinuz and UKI files for all kernels
 _generate_all_files() {
   local sign="$1"
-  /usr/lib/booster/regenerate_images
-  echo -e "${YELLOW}::${NC} Generating UKI files for all kernels..." >&2
+  echo -e "${B}::${W} Generating initramfs for all installed kernels...${NC}"
+  _regenerate_images
+  echo -e "${B}::${W} Generating UKI files for all installed kernels...${NC}"
   _generate_all_uki "$sign"
 }
 
@@ -223,7 +311,7 @@ _remove_all_files() {
 
   case "$arg" in
     -F)
-      echo -e "${YELLOW}==> Removing all initramfs*, booster*, vmlinuz* files from /boot${NC}" >&2
+      echo -e "${Y}==> Removing all initramfs*, booster*, vmlinuz* files from /boot${NC}"
 
       # Remove all initramfs-*, booster-*,	 vmlinuz-* files
       rm -f /boot/{initramfs,booster,vmlinuz}*
@@ -232,7 +320,7 @@ _remove_all_files() {
       _remove_efi_dir
       ;;
     "")
-      echo -e "${YELLOW}==>${NC} Removing all known booster and vmlinuz files from /boot..." >&2
+      echo -e "${Y}==>${W} Removing all known booster and vmlinuz files from /boot...${NC}"
 
       # Remove all vmlinuz and initramfs
       rm -f /boot/{booster,vmlinuz}-*
@@ -241,17 +329,17 @@ _remove_all_files() {
       _remove_all_uki
       ;;
     *)
-      echo -e "${RED}==>${NC} Unknown parameter '$arg' passed."
+      echo -e "${R}==>${NC} Unknown parameter ${R}$arg${NC} passed." >&2 && exit
       ;;
   esac
-  echo -e "${GREEN}==>${NC} Done." >&2
+  echo -e "${G}==>${W} Done.${NC}"
 }
 
 # Removes all known UKI files from esp/EFI/Linux dir
 _remove_all_uki() {
   shopt -s nullglob
 
-  echo -e "${YELLOW}==>${NC} Removing all known UKI files from ${EFI_DIR} dir...${NC}" >&2
+  echo -e "${Y}==>${W} Removing all known UKI files from ${EFI_DIR} dir...${NC}"
 
   # Store all UKI files in array
   local uki_files=("${EFI_DIR}"/arch-*.efi)
@@ -275,14 +363,14 @@ _remove_efi_dir() {
   if _sbctl_exists; then
     for efi_file in "${efi_files[@]}"; do
       # If EFI file exists in sbctl database, remove it
-      if sbctl list-files --json | jq -r '.[].file' | grep -qw "$efi_file"; then
+      if _in_db "$efi_file"; then
         # Remove EFI file from sbctl database
         sbctl remove-file "$efi_file" || :
       fi
     done
   fi
 
-  echo -e "${YELLOW}==> Removing ${EFI_DIR} dir...${NC}" >&2
+  echo -e "${Y}==> Removing ${EFI_DIR} dir...${NC}"
 
   # Remove esp/EFI/Linux dir
   rm -rf "$EFI_DIR"
@@ -295,14 +383,20 @@ _remove_uki() {
   local pkgbase="$1"
   _check_pkgbase "$pkgbase"
 
-  # UKI file path
-  local uki="${EFI_DIR}/arch-${pkgbase}.efi"
+  # Store all UKI files in array
+  readarray -t efi_files < <(find "${EFI_DIR}" \
+    -type f \
+    -name "arch-${pkgbase}.efi" -o \
+    -name "arch-${pkgbase}-fallback.efi")
 
-  # Remove UKI file
-  rm -f "$uki"
-
-  # Remove UKI file from sbctl database
-  if _sbctl_exists; then sbctl remove-file "$uki" || :; fi
+  for efi_file in "${efi_files[@]}"; do
+    echo -e "${Y}==>${W} Removing ${efi_file} file...${NC}"
+    if _in_db "$efi_file"; then
+      # Remove EFI file from sbctl database
+      sbctl remove-file "$efi_file" || :
+    fi
+    rm -f "$efi_file"
+  done
 }
 
 main "$@"; exit

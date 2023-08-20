@@ -152,6 +152,16 @@ _should_generate_fallback() {
   false
 }
 
+# Checks if the booster-um should always sign generated UKI
+_should_sign() {
+  [[ ! -e "$CONFIG" ]] && return 1
+  yq '.sign_uki == true' "$CONFIG" | grep -Fqwx -- 'true'
+  if [[ $? -eq 0 ]]; then
+    return
+  fi;
+  false
+}
+
 # Basic function, generates one UKI
 _generate_uki() {
   # arguments

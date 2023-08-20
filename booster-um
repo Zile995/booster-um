@@ -104,6 +104,7 @@ Examples: $command_name -g linux
 EOF
 }
 
+# Checks if file is in sbctl database
 _in_db() {
   sbctl list-files --json | yq -r '.[].file' | grep -qw "$1"
 }
@@ -311,7 +312,7 @@ _remove_all_files() {
 
   case "$arg" in
     -F)
-      echo -e "${Y}==> Removing all initramfs*, booster*, vmlinuz* files from /boot${NC}"
+      echo -e "${Y}==>${NC} Removing ${Y}all initramfs*, booster*, vmlinuz*${NC} files from ${Y}/boot${NC}..."
 
       # Remove all initramfs-*, booster-*,	 vmlinuz-* files
       rm -f /boot/{initramfs,booster,vmlinuz}*
@@ -320,7 +321,7 @@ _remove_all_files() {
       _remove_efi_dir
       ;;
     "")
-      echo -e "${Y}==>${W} Removing all known booster and vmlinuz files from /boot...${NC}"
+      echo -e "${Y}==>${NC} Removing ${Y}all known booster and vmlinuz${NC} files from ${Y}/boot${NC}..."
 
       # Remove all vmlinuz and initramfs
       rm -f /boot/{booster,vmlinuz}-*
@@ -332,14 +333,14 @@ _remove_all_files() {
       echo -e "${R}==>${NC} Unknown parameter ${R}$arg${NC} passed." >&2 && exit
       ;;
   esac
-  echo -e "${G}==>${W} Done.${NC}"
+  echo -e "${G}==>${NC} Done."
 }
 
 # Removes all known UKI files from esp/EFI/Linux dir
 _remove_all_uki() {
   shopt -s nullglob
 
-  echo -e "${Y}==>${W} Removing all known UKI files from ${EFI_DIR} dir...${NC}"
+  echo -e "${Y}==>${NC} Removing ${Y}all known UKI${NC} files from ${Y}${EFI_DIR}${NC} dir..."
 
   # Store all UKI files in array
   local uki_files=("${EFI_DIR}"/arch-*.efi)
@@ -370,7 +371,7 @@ _remove_efi_dir() {
     done
   fi
 
-  echo -e "${Y}==> Removing ${EFI_DIR} dir...${NC}"
+  echo -e "${Y}==>${NC} Removing ${Y}${EFI_DIR}${NC} dir..."
 
   # Remove esp/EFI/Linux dir
   rm -rf "$EFI_DIR"
@@ -390,7 +391,7 @@ _remove_uki() {
     -name "arch-${pkgbase}-fallback.efi")
 
   for efi_file in "${efi_files[@]}"; do
-    echo -e "${Y}==>${W} Removing ${efi_file} file...${NC}"
+    echo -e "${Y}==>${NC} Removing ${Y}${efi_file}${NC} file..."
     if _in_db "$efi_file"; then
       # Remove EFI file from sbctl database
       sbctl remove-file "$efi_file" || :

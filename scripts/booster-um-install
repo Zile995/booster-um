@@ -16,7 +16,7 @@ done
 
 # Generate UKI files for all kernels
 if [ "${all}" -eq "1" ]; then
-  booster-um -G .
+  booster-um -U
   exit
 fi
 

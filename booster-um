@@ -24,16 +24,11 @@ main() {
       ;;
   esac
 
-  # ESP path
-  local esp_path
-  esp_path="$(bootctl --print-esp-path)"
-
-  # UKI file paths
-  uki_paths=()
+  # EFI dir path
+  _set_efi_path
 
   # Common paths
   CMDLINE=/etc/kernel/cmdline
-  EFI_DIR="${esp_path}/EFI/Linux"
   SPLASH=/usr/share/systemd/bootctl/splash-arch.bmp
 
   # Configs
@@ -57,7 +52,7 @@ main() {
       ;;
     -G)
       # Generate UKI files for all kernels
-      _generate_all_files "$2"
+      _generate_all_files
       ;;
     -R)
       # Remove booster*, vmlinuz* and UKI files for all installed kernels
@@ -65,10 +60,16 @@ main() {
       _remove_all_files "$2"
       ;;
     -u)
-      # Generate UKI on kernel update
+      # This argument is used in libalpm hook
+      # Generate UKI file on kernel update
       # Do not sign the UKI file if it exists in the sbctl database
       _generate_fallback_initramfs "$2" "$3"
       _generate_uki "$2" "$3" .
+      ;;
+    -U)
+      # This argument is used in libalpm hook
+      # Generate UKI files for all installed kernels
+      _generate_all_files .
       ;;
     *)
       echo -e "${R}==>${NC} Unknown parameter ${R}$arg${NC} passed." >&2
@@ -104,16 +105,6 @@ Examples: $command_name -g linux
 EOF
 }
 
-# Checks if file is in sbctl database
-_in_db() {
-  sbctl list-files --json | yq -r '.[].file' | grep -qw "$1"
-}
-
-# Check if sbctl command exists
-_sbctl_exists() {
-  command -v -- sbctl > /dev/null 2>&1
-}
-
 # Checks if the package name is actually a kernel package name
 _check_pkgbase() {
   local pkgbase="$1"
@@ -122,9 +113,28 @@ _check_pkgbase() {
   fi
 }
 
+# Sets EFI dir path
+_set_efi_path() {
+  local esp_path boot_path
+  esp_path="$(bootctl -p)"
+  boot_path="$(bootctl -x)"
+
+  if [ "$esp_path" == "$boot_path" ]; then
+    EFI_DIR="${esp_path}/EFI/Linux"
+    return
+  fi
+
+  local boot_disk part_type_name
+  boot_disk="$(findmnt -nreo source ${boot_path})"
+  type_name="$(lsblk -lno PARTTYPENAME ${boot_disk})"
+
+  if [[ "$type_name" == "Linux extended boot" ]]; then
+    EFI_DIR="${boot_path}/EFI/Linux"
+  fi
+}
+
 # Find out all package names of installed kernels
 _find_kernels() {
-
   kernels=()
   readarray -t -O "${#kernels[@]}" kernels < <(find /usr/lib/modules \
     -maxdepth 1 \
@@ -134,6 +144,16 @@ _find_kernels() {
 
   # Generate array of valid kernel package names
   readarray -t pkgbases < <(printf '%s/pkgbase\n' "${kernels[@]}" | xargs -I {} cat {})
+}
+
+# Checks if file is in sbctl database
+_in_db() {
+  sbctl list-files --json | yq -r '.[].file' | grep -qw "$1"
+}
+
+# Check if sbctl command exists
+_sbctl_exists() {
+  command -v -- sbctl > /dev/null 2>&1
 }
 
 # Checks if the creation of universal images is enabled

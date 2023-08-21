@@ -1,7 +1,7 @@
 # Maintainer: Zile995 <stefan.zivkovic995@gmail.com>
 
 pkgname=booster-um-git
-pkgver=1.1.r0.g3db3c31
+pkgver=1.1.r14.g1a753d9
 pkgrel=1
 pkgdesc="Booster UKI Manager - Simple bash script to manage booster initramfs, vmlinuz and UKI files"
 url="https://github.com/Zile995/booster-um"
@@ -23,6 +23,7 @@ package() {
   cd "$pkgname"
 
   # Create config file
+  mkdir "${pkgdir}/etc/"
   touch "${pkgdir}/etc/booster-um.yaml"
 
   # Install the booster-um

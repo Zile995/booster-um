@@ -172,10 +172,10 @@ _should_generate_fallback() {
 }
 
 # Checks if the booster-um should always sign generated UKI
-_should_sign() {
-  [[ ! -e "$CONFIG" ]] && return 1
-  yq '.sign_uki == true' "$CONFIG" | grep -Fqwx -- 'true'
-  if [[ $? -eq 0 ]]; then
+_should_sign_uki() {
+  [[ ! -e "$CONFIG" ]] && return
+  yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'
+  if [[ $? -eq 1 ]]; then
     return
   fi;
   false
@@ -237,8 +237,9 @@ _generate_uki() {
       --splash="${SPLASH}" \
       --output="${UKI}" | tail -n 1
 
-    # Retrun if sbctl is not installed
-    if ! _sbctl_exists; then return; fi
+    # Continue if sbctl is not installed
+    # Continue if the UKI file does not need to be signed
+    if ! _sbctl_exists || ! _should_sign_uki; then continue; fi
 
     if [ "${sign:=-s}" != "-s" ]; then
       # Sbctl hook should sign the UKI file if it already exists in database

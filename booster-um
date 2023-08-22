@@ -119,17 +119,16 @@ _set_efi_path() {
   esp_path="$(bootctl -p)"
   boot_path="$(bootctl -x)"
 
-  if [ "$esp_path" == "$boot_path" ]; then
+  if [ "$esp_path" != "$boot_path" ]; then
+    local boot_disk type_name
+    boot_disk="$(findmnt -nreo source ${boot_path})"
+    type_name="$(lsblk -lno PARTTYPENAME ${boot_disk})"
+
+    if [[ "$type_name" == "Linux extended boot" ]]; then
+      EFI_DIR="${boot_path}/EFI/Linux"
+    fi
+  else
     EFI_DIR="${esp_path}/EFI/Linux"
-    return
-  fi
-
-  local boot_disk type_name
-  boot_disk="$(findmnt -nreo source ${boot_path})"
-  type_name="$(lsblk -lno PARTTYPENAME ${boot_disk})"
-
-  if [[ "$type_name" == "Linux extended boot" ]]; then
-    EFI_DIR="${boot_path}/EFI/Linux"
   fi
 }
 

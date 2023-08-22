@@ -124,7 +124,7 @@ _set_efi_path() {
     return
   fi
 
-  local boot_disk part_type_name
+  local boot_disk type_name
   boot_disk="$(findmnt -nreo source ${boot_path})"
   type_name="$(lsblk -lno PARTTYPENAME ${boot_disk})"
 

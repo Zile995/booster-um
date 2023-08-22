@@ -181,6 +181,16 @@ _should_sign_uki() {
   false
 }
 
+# Checks if the booster-um should remove leftovers (vmlinuz and initramfs)
+_should_remove_leftovers() {
+  [[ ! -e "$CONFIG" ]] && return
+  yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'
+  if [[ $? -eq 1 ]]; then
+    return
+  fi;
+  false
+}
+
 # Basic function, generates one UKI
 _generate_uki() {
   # arguments
@@ -250,7 +260,9 @@ _generate_uki() {
   done
 
   # Remove the leftovers (vmlinuz and booster initramfs)
-  rm -f "$VMLINUZ" "${initramfs[@]}"
+  if _should_remove_leftovers; then
+    rm -f "$VMLINUZ" "${initramfs[@]}"
+  fi
 }
 
 # Generates UKI file for specified kernel package name
@@ -427,6 +439,10 @@ _remove_uki() {
     fi
     rm -f "$efi_file"
   done
+
+  if _should_remove_leftovers; then
+    rm -f /boot/{booster,vmlinuz}-"${pkgbase}"*
+  fi
 }
 
 main "$@"; exit

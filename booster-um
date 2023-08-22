@@ -24,9 +24,6 @@ main() {
       ;;
   esac
 
-  # EFI dir path
-  _set_efi_path
-
   # Common paths
   CMDLINE=/etc/kernel/cmdline
   SPLASH=/usr/share/systemd/bootctl/splash-arch.bmp
@@ -35,11 +32,11 @@ main() {
   CONFIG=/etc/booster-um.yaml
   BOOSTER_CONFIG=/etc/booster.yaml
 
+  # EFI dir path
+  _set_efi_path
+
   # Find all installed kernels
   _find_kernels
-
-  # Trigger any potential automounts
-  stat -- /boot "$esp_path" &>/dev/null || :
 
   case "${arg}" in
     -g)
@@ -130,6 +127,9 @@ _set_efi_path() {
   else
     EFI_DIR="${esp_path}/EFI/Linux"
   fi
+
+  # Trigger any potential automounts
+  stat -- /boot "$esp_path" &>/dev/null || :
 }
 
 # Find out all package names of installed kernels
@@ -238,7 +238,6 @@ _generate_uki() {
       --output="${UKI}" | tail -n 1
 
     # Continue if sbctl is not installed
-    # Continue if the UKI file does not need to be signed
     if ! _sbctl_exists || ! _should_sign_uki; then continue; fi
 
     if [ "${sign:=-s}" != "-s" ]; then

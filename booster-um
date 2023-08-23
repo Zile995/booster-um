@@ -347,6 +347,20 @@ _generate_all_files() {
   _generate_all_uki "$sign"
 }
 
+# Removes the file from sbctl database
+_remove_from_db() {
+  local file="$1"
+
+  # Return if sbctl doesn't exists
+  if ! _sbctl_exists; then return; fi
+
+  # Remove the file if it exists in the database
+  if _in_db "$file"; then
+    # Remove the file from sbctl database
+    sbctl remove-file "$file" || :
+  fi
+}
+
 # Removes sbctl file database completely
 # Removes all known booster initramfs, vmlinuz and UKI files
 # With -F argument it removes all initramfs-*, booster-*, vmlinuz-* files and esp/EFI/Linux dir
@@ -389,9 +403,11 @@ _remove_all_uki() {
   local uki_files=("${EFI_DIR}"/arch-*.efi)
 
   for uki_file in "${uki_files[@]}"; do
-    rm -f "$uki_file"
     # Remove the UKI file from sbctl database
-    if _sbctl_exists; then sbctl remove-file "$uki_file" || :; fi
+    _remove_from_db "$uki_file"
+
+    # Remove the UKI file
+    rm -f "$uki_file"
   done
 
   shopt -u nullglob
@@ -404,15 +420,10 @@ _remove_efi_dir() {
   # Store all EFI files in array
   local efi_files=("${EFI_DIR}"/*.efi)
 
-  if _sbctl_exists; then
-    for efi_file in "${efi_files[@]}"; do
-      # If EFI file exists in sbctl database, remove it
-      if _in_db "$efi_file"; then
-        # Remove EFI file from sbctl database
-        sbctl remove-file "$efi_file" || :
-      fi
-    done
-  fi
+  for efi_file in "${efi_files[@]}"; do
+    # Remove the file from sbctl database
+    _remove_from_db "$efi_file"
+  done
 
   echo -e "${Y}==>${NC} Removing ${Y}${EFI_DIR}${NC} dir..."
 
@@ -435,10 +446,10 @@ _remove_uki() {
 
   for efi_file in "${efi_files[@]}"; do
     echo -e "${Y}==>${NC} Removing ${Y}${efi_file}${NC} file..."
-    if _in_db "$efi_file"; then
-      # Remove EFI file from sbctl database
-      sbctl remove-file "$efi_file" || :
-    fi
+    # Remove the EFI file from sbctl database
+    _remove_from_db "$efi_file"
+
+    # Remove the EFI file
     rm -f "$efi_file"
   done
 

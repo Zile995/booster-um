@@ -35,6 +35,9 @@ main() {
   # EFI dir path
   _set_efi_path
 
+  # Trigger any potential automounts
+  stat -- /boot /efi "$EFI_DIR" &>/dev/null || :
+
   # Find all installed kernels
   _find_kernels
 
@@ -117,19 +120,18 @@ _set_efi_path() {
   boot_path="$(bootctl -x)"
 
   if [ "$esp_path" != "$boot_path" ]; then
-    local boot_disk type_name
+    local boot_disk part_guid xbootldr_guid
+    xbootldr_guid="bc13c2ff-59e6-4262-a352-b275fd6f7172"
     boot_disk="$(findmnt -nreo source ${boot_path})"
-    type_name="$(lsblk -lno PARTTYPENAME ${boot_disk})"
+    part_guid="$(lsblk -lno PARTTYPE ${boot_disk})"
 
-    if [[ "$type_name" == "Linux extended boot" ]]; then
+    if [[ "$part_guid" == "$xbootldr_guid" ]]; then
       EFI_DIR="${boot_path}/EFI/Linux"
+      return
     fi
-  else
-    EFI_DIR="${esp_path}/EFI/Linux"
   fi
 
-  # Trigger any potential automounts
-  stat -- /boot "$esp_path" &>/dev/null || :
+  EFI_DIR="${esp_path}/EFI/Linux"
 }
 
 # Find out all package names of installed kernels

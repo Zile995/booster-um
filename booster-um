@@ -431,7 +431,7 @@ _remove_uki() {
   readarray -t efi_files < <(find "${EFI_DIR}" \
     -type f \
     -name "arch-${pkgbase}.efi" -o \
-    -name "arch-${pkgbase}-fallback.efi")
+    -name "arch-${pkgbase}-fallback.efi" 2> /dev/null)
 
   for efi_file in "${efi_files[@]}"; do
     echo -e "${Y}==>${NC} Removing ${Y}${efi_file}${NC} file..."

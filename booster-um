@@ -123,7 +123,7 @@ _set_efi_path() {
     local boot_disk part_guid xbootldr_guid
     xbootldr_guid="bc13c2ff-59e6-4262-a352-b275fd6f7172"
     boot_disk="$(findmnt -nreo source ${boot_path})"
-    part_guid="$(lsblk -lno PARTTYPE ${boot_disk})"
+    part_guid="$(partx -g -o TYPE ${boot_disk})"
 
     if [[ "$part_guid" == "$xbootldr_guid" ]]; then
       EFI_DIR="${boot_path}/EFI/Linux"

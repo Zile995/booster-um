@@ -380,8 +380,9 @@ _remove_all_files() {
     "")
       echo -e "${Y}==>${NC} Removing ${Y}all known booster and vmlinuz${NC} files from ${Y}/boot${NC}..."
 
-      # Remove all vmlinuz and initramfs
-      rm -f /boot/{booster,vmlinuz}-*
+      # Remove all known vmlinuz and initramfs files
+      local boot_files=(/boot/{booster,vmlinuz}-"${pkgbases[@]}"{"",-fallback.img,.img})
+      rm -f "${boot_files[@]}"
 
       # Remove all known UKI files from esp/EFI/Linux dir
       _remove_all_uki
@@ -400,7 +401,7 @@ _remove_all_uki() {
   echo -e "${Y}==>${NC} Removing ${Y}all known UKI${NC} files from ${Y}${EFI_DIR}${NC} dir..."
 
   # Store all UKI files in array
-  local uki_files=("${EFI_DIR}"/arch-*.efi)
+  local uki_files=("${EFI_DIR}"/arch-"${pkgbases[@]}"{-fallback.efi,.efi})
 
   for uki_file in "${uki_files[@]}"; do
     # Remove the UKI file from sbctl database
@@ -453,9 +454,8 @@ _remove_uki() {
     rm -f "$efi_file"
   done
 
-  if _should_remove_leftovers; then
-    rm -f /boot/{booster,vmlinuz}-"${pkgbase}"*
-  fi
+  # Remove all known vmlinuz and initramfs files for specified kernel
+  rm -f /boot/{booster,vmlinuz}-"${pkgbase}"{"",-fallback.img,.img}
 }
 
 main "$@"; exit

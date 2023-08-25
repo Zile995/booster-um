@@ -3,12 +3,12 @@
 set -e
 
 # Colors
-W='\e[1;39m' # White
+W='\e[1;39m'   # White
 R='\033[1;31m' # Red
 G='\033[1;32m' # Green
 B='\033[1;34m' # Blue
 Y='\033[1;33m' # Yellow
-NC='\033[0m' # No color
+NC='\033[0m'   # No color
 
 main() {
   local arg="$1"
@@ -19,7 +19,7 @@ main() {
       exit
       ;;
     *)
-      [ $EUID -ne 0 ] && \
+      [ $EUID -ne 0 ] &&
         echo -e "${R}==>${NC} Please run booster-um as ${R}root${NC}." >&2 && exit 1
       ;;
   esac
@@ -169,7 +169,7 @@ _should_generate_fallback() {
   yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true'
   if [[ $? -eq 0 ]] && ! _is_universal; then
     return
-  fi;
+  fi
   false
 }
 
@@ -179,7 +179,7 @@ _should_sign_uki() {
   yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'
   if [[ $? -eq 1 ]]; then
     return
-  fi;
+  fi
   false
 }
 
@@ -189,7 +189,7 @@ _should_remove_leftovers() {
   yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'
   if [[ $? -eq 1 ]]; then
     return
-  fi;
+  fi
   false
 }
 
@@ -200,27 +200,30 @@ _generate_uki() {
   local sign="$3"
 
   # systemd-ukify paths
-  local UCODE UNAME VMLINUZ UKI
+  local UNAME VMLINUZ UKI INITRD
   UNAME="$2"
 
   echo -e "${B}==>${NC} Generating UKI for ${G}${pkgbase}${NC}..."
 
-  # ucode
-  mapfile -d '' ucodes < <(find /boot -name '*-ucode.img' -type f -print0)
-  [[ ${#ucodes[@]} -gt 1 ]] && echo "${R}==>${NC} Mutlitple microcode images detected, please use one!" >&2 && exit 1
-  UCODE="${ucodes[0]}"
-
-  # vmlinuz
+  # vmlinuz path
   VMLINUZ="/boot/vmlinuz-${pkgbase}"
-  [[ ! -e "$VMLINUZ" ]] && {
-    echo -e "${R}==>${NC} Unable to find compressed kernel image, ${R}vmlinuz-${pkgbase}${NC}" >&2
-    echo -e "${R}==>${NC} Regenerate kernel files with ${G}booster-um -g ${pkgbase}${NC} or use ${G}booster-um -G${NC} to regenerate files for all kernels" >&2
-  } && exit 1
 
-  # initramfs
-  local initramfs=( "/boot/booster-${pkgbase}.img" )
+  # initrd path
+  INITRD="/boot/.initrd-${pkgbase}"
+
+  # microcodes
+  mapfile -d '' microcodes < <(find /boot -name '*-ucode.img' -type f -print0)
+
+  # booster initramfs
+  local booster_inits=("/boot/booster-${pkgbase}.img")
   if _should_generate_fallback; then
-    initramfs+=( "/boot/booster-${pkgbase}-fallback.img" )
+    booster_inits+=("/boot/booster-${pkgbase}-fallback.img")
+  fi
+
+  # Generate initramfs if needed files doesn't exist
+  if ! stat -- "${booster_inits[@]}" > /dev/null 2>&1 || [[ ! -e "$VMLINUZ" ]]; then
+    echo -e "${Y}==>${NC} Initramfs or vmlinuz not found, generating them again for ${G}${pkgbase}${NC} kernel..."
+    _generate_initramfs "/usr/lib/modules/${UNAME}"
   fi
 
   # cmdline
@@ -230,24 +233,29 @@ _generate_uki() {
   [[ ! -e "$EFI_DIR" ]] && mkdir -p "$EFI_DIR"
   local uki="${EFI_DIR}/arch-${pkgbase}"
 
-  for initrd_id in "${!initramfs[@]}"; do
-    local INITRD="${initramfs[initrd_id]}"
-    [[ ! -e "$INITRD" ]] && echo -e "${R}==>${NC} Unable to find ${INITRD}${NC}." >&2 && exit 1
+  for init_id in "${!booster_inits[@]}"; do
+    local booster_initramfs="${booster_inits[init_id]}"
+
+    # Create one initrd
+    cat -- "${microcodes[@]}" "$booster_initramfs" > "$INITRD"
 
     # Set UKI fallback path
-    [[ initrd_id -gt 0 ]] && uki="${uki}-fallback"
+    [[ init_id -gt 0 ]] && uki="${uki}-fallback"
 
-    # Set UKI path
+    # Set the UKI path
     UKI="${uki}.efi"
 
-    # Build UKI file
+    # Build the UKI file
     /usr/lib/systemd/ukify build \
       --uname="${UNAME}" \
-      --linux="${VMLINUZ}" ${UCODE:+"--initrd=$UCODE"} \
+      --linux="${VMLINUZ}" \
       --initrd="${INITRD}" \
       --cmdline=@"${CMDLINE}" \
       --splash="${SPLASH}" \
       --output="${UKI}" | tail -n 1
+
+    # Remove the old initrd after creating the UKI file
+    rm -f "$INITRD"
 
     # Continue if sbctl is not installed
     if ! _sbctl_exists || ! _should_sign_uki; then continue; fi
@@ -263,7 +271,7 @@ _generate_uki() {
 
   # Remove the leftovers (vmlinuz and booster initramfs)
   if _should_remove_leftovers; then
-    rm -f "$VMLINUZ" "${initramfs[@]}"
+    rm -f "$VMLINUZ" "${booster_inits[@]}"
   fi
 }
 
@@ -276,10 +284,9 @@ _generate_kernel_uki() {
 
   # Get the index of pkgbase
   index="$(printf "%s\n" "${pkgbases[@]}" | grep -n "^${pkgbase}$" | sed "s/:${pkgbase}//")"
-  local kernel="${kernels[$((index-1))]}"
+  local kernel="${kernels[$((index - 1))]}"
 
-  # Generate booster initramfs
-  _generate_initramfs "$kernel"
+  local uname="${kernel##/usr/lib/modules/}"
 
   # Generate and sign UKI file
   _generate_uki "$pkgbase" "$uname" "$sign"
@@ -371,7 +378,7 @@ _remove_all_files() {
     -F)
       echo -e "${Y}==>${NC} Removing ${Y}all initramfs*, booster*, vmlinuz*${NC} files from ${Y}/boot${NC}..."
 
-      # Remove all initramfs-*, booster-*,	 vmlinuz-* files
+      # Remove all initramfs-*, booster-*, vmlinuz-* files
       rm -f /boot/{initramfs,booster,vmlinuz}*
 
       # Remove esp/EFI/Linux dir all its files from the sbctl database
@@ -379,10 +386,6 @@ _remove_all_files() {
       ;;
     "")
       echo -e "${Y}==>${NC} Removing ${Y}all known booster and vmlinuz${NC} files from ${Y}/boot${NC}..."
-
-      # Remove all known vmlinuz and initramfs files
-      local boot_files=(/boot/{booster,vmlinuz}-"${pkgbases[@]}"{"",-fallback.img,.img})
-      rm -f "${boot_files[@]}"
 
       # Remove all known UKI files from esp/EFI/Linux dir
       _remove_all_uki
@@ -396,22 +399,11 @@ _remove_all_files() {
 
 # Removes all known UKI files from esp/EFI/Linux dir
 _remove_all_uki() {
-  shopt -s nullglob
-
   echo -e "${Y}==>${NC} Removing ${Y}all known UKI${NC} files from ${Y}${EFI_DIR}${NC} dir..."
-
-  # Store all UKI files in array
-  local uki_files=("${EFI_DIR}"/arch-"${pkgbases[@]}"{-fallback.efi,.efi})
-
-  for uki_file in "${uki_files[@]}"; do
-    # Remove the UKI file from sbctl database
-    _remove_from_db "$uki_file"
-
-    # Remove the UKI file
-    rm -f "$uki_file"
+  for pkgbase in "${pkgbases[@]}"; do
+    # Remove the UKI file, vmlinuz and initramfs
+    _remove_uki "$pkgbase"
   done
-
-  shopt -u nullglob
 }
 
 # Removes esp/EFI/Linux dir all its files from the sbctl database
@@ -426,9 +418,8 @@ _remove_efi_dir() {
     _remove_from_db "$efi_file"
   done
 
-  echo -e "${Y}==>${NC} Removing ${Y}${EFI_DIR}${NC} dir..."
-
   # Remove esp/EFI/Linux dir
+  echo -e "${Y}==>${NC} Removing ${Y}${EFI_DIR}${NC} dir..."
   rm -rf "$EFI_DIR"
 
   shopt -u nullglob
@@ -446,8 +437,8 @@ _remove_uki() {
     -name "arch-${pkgbase}-fallback.efi" 2> /dev/null)
 
   for efi_file in "${efi_files[@]}"; do
-    echo -e "${Y}==>${NC} Removing ${Y}${efi_file}${NC} file..."
     # Remove the EFI file from sbctl database
+    echo -e "${Y}==>${NC} Removing ${Y}${efi_file}${NC} file..."
     _remove_from_db "$efi_file"
 
     # Remove the EFI file

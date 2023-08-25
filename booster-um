@@ -222,7 +222,6 @@ _generate_uki() {
 
   # Generate initramfs if needed files doesn't exist
   if ! stat -- "${booster_inits[@]}" > /dev/null 2>&1 || [[ ! -e "$VMLINUZ" ]]; then
-    echo -e "${Y}==>${NC} Initramfs or vmlinuz not found, generating them again for ${G}${pkgbase}${NC} kernel..."
     _generate_initramfs "/usr/lib/modules/${UNAME}"
   fi
 

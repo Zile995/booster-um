@@ -316,12 +316,15 @@ _generate_all_uki() {
 
 # Generates initramfs and fallback initramfs
 _regenerate_images() {
+  local pids=()
   for kernel in "${kernels[@]}"; do
-    _generate_initramfs "$kernel" &
+    _generate_initramfs "$kernel" & pids+=( $! )
   done
 
   # Wait for all background jobs
-  wait
+  for pid in "${pids[@]}"; do
+    wait "$pid"
+  done
 }
 
 # Generate initramfs for specified kernel path
@@ -338,7 +341,11 @@ _generate_initramfs() {
   install -Dm644 "${kernel}/vmlinuz" "$vmlinuz"
 
   # Generate initramfs
-  booster build --force --kernel-version "$uname" "$initramfs"
+  booster build --force --kernel-version "$uname" "$initramfs" || (
+    echo -e "${R}==>${NC} Unable to generate initramfs for ${R}${pkgbase}${NC}..."
+    rm -f "$vmlinuz"
+    exit 1
+  )
 
   # Generate fallback initramfs
   _generate_fallback_initramfs "$pkgbase" "$uname"

@@ -34,9 +34,8 @@ package() {
   install -Dm0755 scripts/booster-um-install -t "${pkgdir}/usr/share/libalpm/scripts"
 
   # Install the hooks
-  install -Dm0644 hooks/90-booster-um-install.hook      -t "${pkgdir}/usr/share/libalpm/hooks"
-  install -Dm0644 hooks/60-booster-um-remove.hook       -t "${pkgdir}/usr/share/libalpm/hooks"
-  install -Dm0644 hooks/60-booster-um-ucode-remove.hook -t "${pkgdir}/usr/share/libalpm/hooks"
+  install -Dm0644 hooks/60-booster-um-remove.hook  -t "${pkgdir}/usr/share/libalpm/hooks"
+  install -Dm0644 hooks/90-booster-um-install.hook -t "${pkgdir}/usr/share/libalpm/hooks"
 
   # Install the LICENSE
   install -Dm0644 LICENSE -t "${pkgdir}/usr/share/licenses/${pkgname}"

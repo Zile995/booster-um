@@ -44,23 +44,25 @@ main() {
   # Flag which controls UKI signing
   sign=1
 
-  # Flag which controls initramfs generation
-  generate=0
+  # Flag which controls initramfs regeneration
+  regenerate=0
 
   case "${arg}" in
     -g)
+      # It will always regenerate initramfs
       # Generate UKI file for specified kernel package name
       shift
-      generate=1
+      regenerate=1
       _generate_kernel_uki "$1"
       ;;
     -r)
-      # Remove UKI file for specified kernel package name
+      # Remove UKI file (and leftovers by default) for specified kernel package name
       shift
       _remove_uki "$1"
       ;;
     -G)
       # Generate UKI files for all kernels
+      # It will always regenerate initramfs
       _generate_all_files
       ;;
     -R)
@@ -72,13 +74,15 @@ main() {
     -u)
       # Generate UKI file on kernel update
       # This argument must be used only in libalpm hooks
-      # Do not sign the UKI file if it exists in the sbctl database
+      # UKI file will not be signed if it already exists in the sbctl database
+      # It will not regenerate initramfs. Initramfs will be generated on kernel update by booster hook.
       shift
       sign=0
       _generate_fallback_initramfs "$1" "$2"
       _generate_uki "$1" "$2"
       ;;
     -U)
+      # It will always regenerate initramfs
       # This argument is used in libalpm hook
       # Generate UKI files for all installed kernels
       sign=0
@@ -233,7 +237,7 @@ _generate_uki() {
   fi
 
   # Generate initramfs if needed files doesn't exist
-  [[ "$generate" -eq 1 ]] && _generate_initramfs "/usr/lib/modules/${UNAME}"
+  [[ "$regenerate" -eq 1 ]] && _generate_initramfs "/usr/lib/modules/${UNAME}"
 
   # Generate initramfs if needed files doesn't exist
   if ! stat -- "${booster_inits[@]}" > /dev/null 2>&1 || [[ ! -e "$VMLINUZ" ]]; then
@@ -383,7 +387,6 @@ _remove_from_db() {
   fi
 }
 
-# Removes sbctl file database completely
 # Removes all known booster initramfs, vmlinuz and UKI files
 # With -F argument it removes all initramfs-*, booster-*, vmlinuz-* files and esp/EFI/Linux dir
 _remove_all_files() {
@@ -414,9 +417,14 @@ _remove_all_files() {
 _remove_leftovers() {
   local pkgbase="$1"
   if _should_remove_leftovers; then
-    rm -f /boot/.initrd*
+    rm -f /boot/.initrd-"${pkgbase}"
     rm -f /boot/vmlinuz-"${pkgbase}"
     rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
+  fi
+  if ! _should_generate_fallback; then
+    local fallback_uki="${EFI_DIR}/arch-${pkgbase}-fallback.efi"
+    _remove_from_db "$fallback_uki"
+    rm -f "$fallback_uki"
   fi
 }
 

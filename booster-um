@@ -314,8 +314,8 @@ _generate_all_uki() {
   done
 }
 
+# Generates initramfs and fallback initramfs
 _regenerate_images() {
-  # Generate initramfs and fallback initramfs
   for kernel in "${kernels[@]}"; do
     _generate_initramfs "$kernel" &
   done
@@ -338,10 +338,7 @@ _generate_initramfs() {
   install -Dm644 "${kernel}/vmlinuz" "$vmlinuz"
 
   # Generate initramfs
-  booster build --force --kernel-version "$uname" "$initramfs" || {
-    rm -f "$vmlinuz" &&
-    echo -e "${R}==>${NC} Unable to generate initramfs for ${R}${pkgbase}${NC}..."
-  }
+  booster build --force --kernel-version "$uname" "$initramfs"
 
   # Generate fallback initramfs
   _generate_fallback_initramfs "$pkgbase" "$uname"
@@ -390,7 +387,7 @@ _remove_all_files() {
       echo -e "${Y}::${NC} Removing ${Y}all initramfs*, booster*, vmlinuz*${NC} files from ${Y}/boot${NC}..."
 
       # Remove all initramfs-*, booster-*, vmlinuz-* files
-      rm -f /boot/{initramfs,booster,vmlinuz}*
+      rm -f /boot/{.initrd,initramfs,booster,vmlinuz}*
 
       # Remove esp/EFI/Linux dir all its files from the sbctl database
       _remove_efi_dir
@@ -410,7 +407,9 @@ _remove_all_files() {
 _remove_leftovers() {
   local pkgbase="$1"
   if _should_remove_leftovers; then
-    rm -f /boot/{booster,vmlinuz}-"${pkgbase}"{"",-fallback.img,.img}
+    rm -f /boot/.initrd*
+    rm -f /boot/vmlinuz-"${pkgbase}"
+    rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
   fi
 }
 

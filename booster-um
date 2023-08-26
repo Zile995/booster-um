@@ -41,14 +41,23 @@ main() {
   # Find all installed kernels
   _find_kernels
 
+  # Flag which controls UKI signing
+  sign=1
+
+  # Flag which controls initramfs generation
+  generate=0
+
   case "${arg}" in
     -g)
       # Generate UKI file for specified kernel package name
-      _generate_kernel_uki "$2"
+      shift
+      generate=1
+      _generate_kernel_uki "$1"
       ;;
     -r)
       # Remove UKI file for specified kernel package name
-      _remove_uki "$2"
+      shift
+      _remove_uki "$1"
       ;;
     -G)
       # Generate UKI files for all kernels
@@ -57,19 +66,23 @@ main() {
     -R)
       # Remove booster*, vmlinuz* and UKI files for all installed kernels
       # -F argument removes mentioned files + other initramfs* files and whole esp/EFI/Linux dir
-      _remove_all_files "$2"
+      shift
+      _remove_all_files "$1"
       ;;
     -u)
-      # This argument is used in libalpm hook
       # Generate UKI file on kernel update
+      # This argument must be used only in libalpm hooks
       # Do not sign the UKI file if it exists in the sbctl database
-      _generate_fallback_initramfs "$2" "$3"
-      _generate_uki "$2" "$3" .
+      shift
+      sign=0
+      _generate_fallback_initramfs "$1" "$2"
+      _generate_uki "$1" "$2"
       ;;
     -U)
       # This argument is used in libalpm hook
       # Generate UKI files for all installed kernels
-      _generate_all_files .
+      sign=0
+      _generate_all_files
       ;;
     *)
       echo -e "${R}==>${NC} Unknown parameter ${R}$arg${NC} passed." >&2
@@ -79,8 +92,8 @@ main() {
 }
 
 show_help() {
-local command_name="${0##*/}"
-cat << EOF
+  local command_name="${0##*/}"
+  cat << EOF
 Usage: $command_name [OPTIONS] <package>
 
 Generate or remove booster UKI files.
@@ -122,7 +135,7 @@ _set_efi_path() {
   if [ "$esp_path" != "$boot_path" ]; then
     local boot_disk part_guid xbootldr_guid
     xbootldr_guid="bc13c2ff-59e6-4262-a352-b275fd6f7172"
-    boot_disk="$(findmnt -nreo source ${boot_path})"
+    boot_disk="$(findmnt -nreo source "${boot_path}")"
     part_guid="$(partx -g -o TYPE ${boot_disk})"
 
     if [[ "$part_guid" == "$xbootldr_guid" ]]; then
@@ -197,7 +210,6 @@ _should_remove_leftovers() {
 _generate_uki() {
   # arguments
   local pkgbase="$1"
-  local sign="$3"
 
   # systemd-ukify paths
   local UNAME VMLINUZ UKI INITRD
@@ -219,6 +231,9 @@ _generate_uki() {
   if _should_generate_fallback; then
     booster_inits+=("/boot/booster-${pkgbase}-fallback.img")
   fi
+
+  # Generate initramfs if needed files doesn't exist
+  [[ "$generate" -eq 1 ]] && _generate_initramfs "/usr/lib/modules/${UNAME}"
 
   # Generate initramfs if needed files doesn't exist
   if ! stat -- "${booster_inits[@]}" > /dev/null 2>&1 || [[ ! -e "$VMLINUZ" ]]; then
@@ -259,7 +274,7 @@ _generate_uki() {
     # Continue if sbctl is not installed
     if ! _sbctl_exists || ! _should_sign_uki; then continue; fi
 
-    if [ "${sign:=-s}" != "-s" ]; then
+    if [[ "$sign" -eq 0 ]]; then
       # Sbctl hook should sign the UKI file if it already exists in database
       if _in_db "$UKI"; then continue; fi
     fi
@@ -269,17 +284,13 @@ _generate_uki() {
   done
 
   # Remove the leftovers (vmlinuz and booster initramfs)
-  if _should_remove_leftovers; then
-    rm -f "$VMLINUZ" "${booster_inits[@]}"
-  fi
+  _remove_leftovers "$pkgbase"
 }
 
 # Generates UKI file for specified kernel package name
 _generate_kernel_uki() {
   local pkgbase="$1"
   _check_pkgbase "$pkgbase"
-
-  local sign="$2"
 
   # Get the index of pkgbase
   index="$(printf "%s\n" "${pkgbases[@]}" | grep -n "^${pkgbase}$" | sed "s/:${pkgbase}//")"
@@ -288,20 +299,18 @@ _generate_kernel_uki() {
   local uname="${kernel##/usr/lib/modules/}"
 
   # Generate and sign UKI file
-  _generate_uki "$pkgbase" "$uname" "$sign"
+  _generate_uki "$pkgbase" "$uname"
 }
 
 # Generates UKI files for all installed kernels
 _generate_all_uki() {
   local uname
-  local sign="$1"
   for kernel in "${kernels[@]}"; do
     read -r pkgbase < "${kernel}/pkgbase"
-
     uname="${kernel##/usr/lib/modules/}"
 
     # Generate and sign UKI file
-    _generate_uki "$pkgbase" "$uname" "$sign"
+    _generate_uki "$pkgbase" "$uname"
   done
 }
 
@@ -318,17 +327,21 @@ _regenerate_images() {
 # Generate initramfs for specified kernel path
 _generate_initramfs() {
   local kernel="$1"
-
   read -r pkgbase < "${kernel}/pkgbase"
-  uname="${kernel##/usr/lib/modules/}"
+  local uname="${kernel##/usr/lib/modules/}"
+  local vmlinuz="/boot/vmlinuz-${pkgbase}"
+  local initramfs="/boot/booster-${pkgbase}.img"
 
   echo -e "${B}==>${NC} Generating initramfs for ${G}${pkgbase}${NC}..."
 
   # Install the vmlinuz
-  install -Dm644 "${kernel}/vmlinuz" "/boot/vmlinuz-${pkgbase}"
+  install -Dm644 "${kernel}/vmlinuz" "$vmlinuz"
 
   # Generate initramfs
-  booster build --force --kernel-version "$uname" "/boot/booster-${pkgbase}.img"
+  booster build --force --kernel-version "$uname" "$initramfs" || {
+    rm -f "$vmlinuz" &&
+    echo -e "${R}==>${NC} Unable to generate initramfs for ${R}${pkgbase}${NC}..."
+  }
 
   # Generate fallback initramfs
   _generate_fallback_initramfs "$pkgbase" "$uname"
@@ -346,11 +359,10 @@ _generate_fallback_initramfs() {
 
 # Generates booster initramfs, vmlinuz and UKI files for all kernels
 _generate_all_files() {
-  local sign="$1"
   echo -e "${B}::${W} Generating initramfs for all installed kernels...${NC}"
   _regenerate_images
   echo -e "${B}::${W} Generating UKI files for all installed kernels...${NC}"
-  _generate_all_uki "$sign"
+  _generate_all_uki
 }
 
 # Removes the file from sbctl database
@@ -375,7 +387,7 @@ _remove_all_files() {
 
   case "$arg" in
     -F)
-      echo -e "${Y}==>${NC} Removing ${Y}all initramfs*, booster*, vmlinuz*${NC} files from ${Y}/boot${NC}..."
+      echo -e "${Y}::${NC} Removing ${Y}all initramfs*, booster*, vmlinuz*${NC} files from ${Y}/boot${NC}..."
 
       # Remove all initramfs-*, booster-*, vmlinuz-* files
       rm -f /boot/{initramfs,booster,vmlinuz}*
@@ -384,8 +396,6 @@ _remove_all_files() {
       _remove_efi_dir
       ;;
     "")
-      echo -e "${Y}==>${NC} Removing ${Y}all known booster and vmlinuz${NC} files from ${Y}/boot${NC}..."
-
       # Remove all known UKI files from esp/EFI/Linux dir
       _remove_all_uki
       ;;
@@ -396,9 +406,17 @@ _remove_all_files() {
   echo -e "${G}==>${NC} Done."
 }
 
+# Removes all known vmlinuz and initramfs files for specified kernel
+_remove_leftovers() {
+  local pkgbase="$1"
+  if _should_remove_leftovers; then
+    rm -f /boot/{booster,vmlinuz}-"${pkgbase}"{"",-fallback.img,.img}
+  fi
+}
+
 # Removes all known UKI files from esp/EFI/Linux dir
 _remove_all_uki() {
-  echo -e "${Y}==>${NC} Removing ${Y}all known UKI${NC} files from ${Y}${EFI_DIR}${NC} dir..."
+  echo -e "${Y}::${NC} Removing ${Y}all known UKI files${NC}..."
   for pkgbase in "${pkgbases[@]}"; do
     # Remove the UKI file, vmlinuz and initramfs
     _remove_uki "$pkgbase"
@@ -444,8 +462,7 @@ _remove_uki() {
     rm -f "$efi_file"
   done
 
-  # Remove all known vmlinuz and initramfs files for specified kernel
-  rm -f /boot/{booster,vmlinuz}-"${pkgbase}"{"",-fallback.img,.img}
+  _remove_leftovers "$pkgbase"
 }
 
 main "$@"; exit

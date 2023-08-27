@@ -3,16 +3,37 @@
 set -e
 
 all=0
-kernels=()
+sign_all=0
+declare -A unames
+
+add_uname() {
+  local file="$1"
+  modules_suffix="${file##usr/lib/modules/}"
+  uname="${modules_suffix%%/*}"
+  unames["$uname"]=""
+}
 
 while read -r line; do
-  if [[ ${line} != usr/lib/modules/* ]]; then
-    all=1
-    break
-  fi
-
-  kernels+=("/${line%/vmlinuz}")
+  case "$line" in
+    usr/bin/booster | usr/lib/booster/* | usr/src/*/dkms.conf | usr/lib/firmware/*)
+      sign_all=1
+      break
+      ;;
+    usr/lib/modules/*/vmlinuz | usr/lib/modules/*/extramodules/*)
+      add_uname "$line"
+      ;;
+    *)
+      all=1
+      break
+      ;;
+  esac
 done
+
+# Generate and sign UKI files for all kernels
+if [ "${sign_all}" -eq "1" ]; then
+  booster-um -G
+  exit
+fi
 
 # Generate UKI files for all kernels
 if [ "${all}" -eq "1" ]; then
@@ -20,14 +41,13 @@ if [ "${all}" -eq "1" ]; then
   exit
 fi
 
-for kernel in "${kernels[@]}"; do
-  if ! pacman -Qqo "${kernel}/pkgbase" > /dev/null 2>&1; then
+for uname in "${!unames[@]}"; do
+  kernel_dir="/usr/lib/modules/${uname}"
+  if ! pacman -Qqo "${kernel_dir}/pkgbase" > /dev/null 2>&1; then
     # if pkgbase does not belong to any package then skip this kernel
     continue
   fi
-  read -r pkgbase < "${kernel}/pkgbase"
-
-  uname="${kernel##/usr/lib/modules/}"
+  read -r pkgbase < "${kernel_dir}/pkgbase"
 
   # Genearate UKI file for updated kernel
   booster-um -u "$pkgbase" "$uname"

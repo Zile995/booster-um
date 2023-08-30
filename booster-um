@@ -468,18 +468,21 @@ _remove_uki() {
   _check_pkgbase "$pkgbase"
 
   # Store all UKI files in array
-  readarray -t efi_files < <(find "${EFI_DIR}" \
+  readarray -t uki_files < <(find "${EFI_DIR}" \
     -type f \
     -name "arch-${pkgbase}.efi" -o \
     -name "arch-${pkgbase}-fallback.efi" 2> /dev/null)
 
-  for efi_file in "${efi_files[@]}"; do
+  for uki in "${uki_files[@]}"; do
     # Remove the EFI file from sbctl database
-    echo -e "${Y}==>${NC} Removing ${Y}${efi_file}${NC} file..."
-    _remove_from_db "$efi_file"
+    echo -e "${Y}==>${NC} Removing ${Y}${uki}${NC} file..."
+    _remove_from_db "$uki"
 
     # Remove the EFI file
-    rm -f "$efi_file"
+    rm -f "$uki"
+
+    # Remove the EFI entry
+    _remove_efi_entry "$uki"
   done
 
   _remove_leftovers "$pkgbase"
@@ -549,7 +552,7 @@ _create_efi_entry() {
 
     echo -e "${B}==>${NC} Creating EFI entry ${G}${label}${NC}..."
 
-    # Add EFI entry
+    # Add the EFI entry
     efibootmgr --create \
       --label "${label}" \
       --disk "${disk}" \
@@ -560,6 +563,40 @@ _create_efi_entry() {
     # Preserve boot order
     _preserve_boot_order
   fi
+}
+
+# Removes the EFI entry
+_remove_efi_entry() {
+  # Return if efibootmgr doesn't exist
+  if ! _command_exists efibootmgr || ! _should_create_efi_entry; then return; fi
+
+  local uki loader_path pkgbase label
+  uki="$1"
+
+  # Extract pkgbase from UKI file path
+  pkgbase="${uki##*arch-}"
+  pkgbase="${pkgbase%%.efi}"
+
+  # Set loader path wihout ESP mount point.
+  loader_path="${uki#$ESP_MOUNT}"
+  # Set loader path with backslashes
+  loader_path="${loader_path//\//\\}"
+
+  # Set OS label to NAME + (pkgbase): Example: Arch Linux (linux)
+  label="$(grep -Po '(?<=^NAME=").*(?=")' /etc/os-release)"
+  label="${label} ($pkgbase)"
+
+  # Find all known efibootmgr boot numbers for the specified UKI
+  readarray -t boot_nums < <(efibootmgr | \
+    grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
+    awk '{ print $1 }' | \
+    sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
+
+  echo -e "${B}==>${NC} Removing EFI entry ${G}${label}${NC}..."
+
+  for boot_num in "${boot_nums[@]}"; do
+    efibootmgr -b "$boot_num" -B > /dev/null
+  done
 }
 
 main "$@"; exit

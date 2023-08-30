@@ -500,10 +500,18 @@ _sign_uki() {
   sbctl sign --save "$uki" || :
 }
 
+# Checks if efi entry exists
 _efi_entry_exists() {
   local loader_path="$1"
   uppercase_loader_path="${loader_path^^}"
   efibootmgr | grep -Fq -e "$loader_path" -e "$uppercase_loader_path"
+}
+
+# Preserves old boot order
+_preserve_boot_order() {
+  readarray -d ',' boot_order < <(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
+  old_boot_order=$(printf "%s" "${boot_order[@]:1}")
+  efibootmgr -o "$old_boot_order,${boot_order[0]%%,}" > /dev/null
 }
 
 # Adds the EFI entry
@@ -548,6 +556,9 @@ _create_efi_entry() {
       --part "${esp_number}" \
       --loader "${loader_path^^}" \
       --unicode > /dev/null
+
+    # Preserve boot order
+    _preserve_boot_order
   fi
 }
 

@@ -144,7 +144,9 @@ _set_efi_path() {
     boot_partition="$(findmnt -nreo source "${boot_path}")"
     part_guid="$(partx -g -o TYPE ${boot_partition})"
 
-    [[ "$part_guid" == "$xbootldr_guid" ]] && ESP_MOUNT="$boot_path"
+    if [[ "$part_guid" == "$xbootldr_guid" ]]; then
+      ESP_MOUNT="$boot_path"
+    fi
   fi
 
   EFI_DIR="${ESP_MOUNT}/EFI/Linux"
@@ -273,6 +275,9 @@ _generate_uki() {
 
     # Remove the old initrd after creating the UKI file
     rm -f "$INITRD"
+
+    # Create the EFI entry
+    _create_efi_entry "$UKI"
 
     # Sign the UKI file
     _sign_uki "$UKI"
@@ -483,6 +488,57 @@ _sign_uki() {
 
   # Sign UKI file with sbctl
   sbctl sign --save "$uki" || :
+}
+
+_efi_entry_exists() {
+  local loader_path="$1"
+  uppercase_loader_path="${loader_path^^}"
+  efibootmgr | grep -Fq -e "$loader_path" -e "$uppercase_loader_path"
+}
+
+# Adds the EFI entry
+_create_efi_entry() {
+  # Return if efibootmgr doesn't exist
+  if ! command -v -- efibootmgr > /dev/null 2>&1; then return; fi
+
+  local uki loader_path pkgbase
+  uki="$1"
+
+  # Extract pkgbase from UKI file path
+  pkgbase="${uki##*arch-}"
+  pkgbase="${pkgbase%%.efi}"
+
+  # Set loader path wihout ESP mount point.
+  loader_path="${uki#$ESP_MOUNT}"
+  # Set loader path with backslashes
+  loader_path="${loader_path//\//\\}"
+
+  if ! _efi_entry_exists "$loader_path"; then
+    local disk esp esp_name esp_number label
+    # Get Efi System Partition. Example: /dev/nvme0n1p1
+    esp="$(findmnt -nreo source "${ESP_MOUNT}")"
+
+    # Get the found boot partition disk. Example: /dev/nvme0n1
+    disk="/dev/$(lsblk -r -n -o PKNAME "${esp}")"
+
+    # Get Efi System Partition number. Example: For /dev/nvme0n1p1, the number is 1
+    esp_number="$(lsblk -r -n -o KNAME "${esp}")"
+    esp_number="$(</sys/class/block/"${esp_number}"/partition)"
+
+    # Set OS label to NAME + (pkgbase): Example: Arch Linux (linux)
+    label="$(grep -Po '(?<=^NAME=").*(?=")' /etc/os-release)"
+    label="${label} ($pkgbase)"
+
+    echo -e "${B}==>${NC} Creating EFI entry ${G}${label}${NC}..."
+
+    # Add EFI entry
+    efibootmgr --create \
+      --label "${label}" \
+      --disk "${disk}" \
+      --part "${esp_number}" \
+      --loader "${loader_path^^}" \
+      --unicode > /dev/null
+  fi
 }
 
 main "$@"; exit

@@ -170,9 +170,9 @@ _in_db() {
   sbctl list-files --json | yq -r '.[].file' | grep -qw "$1"
 }
 
-# Check if sbctl command exists
-_sbctl_exists() {
-  command -v -- sbctl > /dev/null 2>&1
+# Check if specified command exists
+_command_exists() {
+  command -v -- "$1" > /dev/null 2>&1
 }
 
 # Checks if the creation of universal images is enabled
@@ -186,6 +186,16 @@ _should_generate_fallback() {
   [[ ! -e "$CONFIG" ]] && return 1
   yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true'
   if [[ $? -eq 0 ]] && ! _is_universal; then
+    return
+  fi
+  false
+}
+
+# Checks if the booster-um should create EFI entry
+_should_create_efi_entry() {
+  [[ ! -e "$CONFIG" ]] && return 1
+  yq '.create_efi_entry == true' "$CONFIG" | grep -Fqwx -- 'true'
+  if [[ $? -eq 0 ]]; then
     return
   fi
   false
@@ -276,7 +286,7 @@ _generate_uki() {
     # Remove the old initrd after creating the UKI file
     rm -f "$INITRD"
 
-    # Create the EFI entry
+    # Create EFI entry
     _create_efi_entry "$UKI"
 
     # Sign the UKI file
@@ -374,7 +384,7 @@ _remove_from_db() {
   local file="$1"
 
   # Return if sbctl doesn't exists
-  if ! _sbctl_exists; then return; fi
+  if ! _command_exists sbctl; then return; fi
 
   # Remove the file if it exists in the database
   if _in_db "$file"; then
@@ -479,7 +489,7 @@ _remove_uki() {
 _sign_uki() {
   local uki="$1"
   # Return if sbctl is not installed or UKI should not be signed
-  if ! _sbctl_exists || ! _should_sign_uki; then return; fi
+  if ! _command_exists sbctl || ! _should_sign_uki; then return; fi
 
   if [[ "$sign" -eq 0 ]]; then
     # Sbctl hook should sign the UKI file if it already exists in database
@@ -499,7 +509,7 @@ _efi_entry_exists() {
 # Adds the EFI entry
 _create_efi_entry() {
   # Return if efibootmgr doesn't exist
-  if ! command -v -- efibootmgr > /dev/null 2>&1; then return; fi
+  if ! _command_exists efibootmgr || ! _should_create_efi_entry; then return; fi
 
   local uki loader_path pkgbase
   uki="$1"

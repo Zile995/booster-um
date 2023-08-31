@@ -136,19 +136,18 @@ _set_efi_path() {
   esp_path="$(bootctl -p)"
   boot_path="$(bootctl -x)"
 
-  if [ "$esp_path" != "$boot_path" ]; then
-    local boot_disk part_guid xbootldr_guid
-    xbootldr_guid="bc13c2ff-59e6-4262-a352-b275fd6f7172"
-    boot_disk="$(findmnt -nreo source "${boot_path}")"
-    part_guid="$(partx -g -o TYPE ${boot_disk})"
+  ESP_MOUNT="$esp_path"
 
-    if [[ "$part_guid" == "$xbootldr_guid" ]]; then
-      EFI_DIR="${boot_path}/EFI/Linux"
-      return
-    fi
+  if [ "$esp_path" != "$boot_path" ]; then
+    local boot_partition part_guid xbootldr_guid
+    xbootldr_guid="bc13c2ff-59e6-4262-a352-b275fd6f7172"
+    boot_partition="$(findmnt -nreo source "${boot_path}")"
+    part_guid="$(partx -g -o TYPE ${boot_partition})"
+
+    [[ "$part_guid" == "$xbootldr_guid" ]] && ESP_MOUNT="$boot_path"
   fi
 
-  EFI_DIR="${esp_path}/EFI/Linux"
+  EFI_DIR="${ESP_MOUNT}/EFI/Linux"
 }
 
 # Find out all package names of installed kernels
@@ -249,7 +248,7 @@ _generate_uki() {
 
   # UKI file path
   [[ ! -e "$EFI_DIR" ]] && mkdir -p "$EFI_DIR"
-  local uki="${EFI_DIR}/arch-${pkgbase}"
+  local uki_path="${EFI_DIR}/arch-${pkgbase}"
 
   for init_id in "${!booster_inits[@]}"; do
     local booster_initramfs="${booster_inits[init_id]}"
@@ -258,10 +257,10 @@ _generate_uki() {
     cat -- "${microcodes[@]}" "$booster_initramfs" > "$INITRD"
 
     # Set UKI fallback path
-    [[ init_id -gt 0 ]] && uki="${uki}-fallback"
+    [[ init_id -gt 0 ]] && uki_path="${uki_path}-fallback"
 
     # Set the UKI path
-    UKI="${uki}.efi"
+    UKI="${uki_path}.efi"
 
     # Build the UKI file
     /usr/lib/systemd/ukify build \
@@ -275,16 +274,8 @@ _generate_uki() {
     # Remove the old initrd after creating the UKI file
     rm -f "$INITRD"
 
-    # Continue if sbctl is not installed
-    if ! _sbctl_exists || ! _should_sign_uki; then continue; fi
-
-    if [[ "$sign" -eq 0 ]]; then
-      # Sbctl hook should sign the UKI file if it already exists in database
-      if _in_db "$UKI"; then continue; fi
-    fi
-
-    # Sign UKI file with sbctl
-    sbctl sign --save "$UKI" || :
+    # Sign the UKI file
+    _sign_uki "$UKI"
   done
 
   # Remove the leftovers (vmlinuz and booster initramfs)
@@ -477,6 +468,21 @@ _remove_uki() {
   done
 
   _remove_leftovers "$pkgbase"
+}
+
+# Signs the UKI file
+_sign_uki() {
+  local uki="$1"
+  # Return if sbctl is not installed or UKI should not be signed
+  if ! _sbctl_exists || ! _should_sign_uki; then return; fi
+
+  if [[ "$sign" -eq 0 ]]; then
+    # Sbctl hook should sign the UKI file if it already exists in database
+    if _in_db "$uki"; then return; fi
+  fi
+
+  # Sign UKI file with sbctl
+  sbctl sign --save "$uki" || :
 }
 
 main "$@"; exit

@@ -422,14 +422,19 @@ _remove_all_files() {
 # Removes all known vmlinuz and initramfs files for specified kernel
 _remove_leftovers() {
   local pkgbase="$1"
-  if _should_remove_leftovers; then
-    rm -f /boot/.initrd-"${pkgbase}"
-    rm -f /boot/vmlinuz-"${pkgbase}"
-    rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
-  fi
+
+  if ! _should_remove_leftovers; then return; fi
+
+  # Remove leftovers in /boot
+  rm -f /boot/.initrd-"${pkgbase}"
+  rm -f /boot/vmlinuz-"${pkgbase}"
+  rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
+
+  # Remove fallback UKI images in ESP if fallback generation is not enabled
   if ! _should_generate_fallback; then
     local fallback_uki="${EFI_DIR}/arch-${pkgbase}-fallback.efi"
     _remove_from_db "$fallback_uki"
+    _remove_efi_entry "$fallback_uki"
     rm -f "$fallback_uki"
   fi
 }
@@ -453,6 +458,9 @@ _remove_efi_dir() {
   for efi_file in "${efi_files[@]}"; do
     # Remove the file from sbctl database
     _remove_from_db "$efi_file"
+
+    # Remove EFI entries
+    _remove_efi_entry "$efi_file"
   done
 
   # Remove esp/EFI/Linux dir
@@ -474,17 +482,18 @@ _remove_uki() {
     -name "arch-${pkgbase}-fallback.efi" 2> /dev/null)
 
   for uki in "${uki_files[@]}"; do
-    # Remove the EFI file from sbctl database
+    # Remove the UKI file from sbctl database
     echo -e "${Y}==>${NC} Removing ${Y}${uki}${NC} file..."
     _remove_from_db "$uki"
 
-    # Remove the EFI file
+    # Remove the UKI file
     rm -f "$uki"
 
     # Remove the EFI entry
     _remove_efi_entry "$uki"
   done
 
+  # Remove the leftovers
   _remove_leftovers "$pkgbase"
 }
 
@@ -506,13 +515,57 @@ _sign_uki() {
 # Checks if efi entry exists
 _efi_entry_exists() {
   local loader_path="$1"
-  uppercase_loader_path="${loader_path^^}"
-  efibootmgr | grep -Fq -e "$loader_path" -e "$uppercase_loader_path"
+  efibootmgr | grep -Fq -e "${loader_path}" -e "${loader_path^^}"
+}
+
+_pkgbase_from_uki_path() {
+  local uki pkgbase
+  uki="$1"
+
+  # Extract pkgbase from UKI file path
+  pkgbase="${uki##*arch-}"
+  pkgbase="${pkgbase%%.efi}"
+  echo "$pkgbase"
+}
+
+_formatted_efi_path() {
+  local efi loader_path
+  efi="$1"
+
+  # Set loader path wihout ESP mount point.
+  efi_path="${uki#$ESP_MOUNT}"
+  # Set loader path with backslashes
+  efi_path="${efi_path//\//\\}"
+  echo "$efi_path"
+}
+
+_get_label() {
+  local pkgbase="$1"
+  # Get OS NAME
+  label="$(grep -Po '(?<=^NAME=").*(?=")' /etc/os-release)"
+  # Set OS label to NAME + (pkgbase)
+  label="${label} ($pkgbase)"
+  echo "$label"
+}
+
+_empty_or_win_entry() {
+  local num_of_entries win_bootmg_path
+  num_of_entries="$1"
+  if [[ "$num_of_entries" -eq 2 ]]; then
+    win_bootmg_path=$(find "${ESP_MOUNT}" -type f -name "bootmgfw.efi" | head -n 1)
+    [[ -z "$win_bootmg_path" ]] && return 1
+
+    # Set loader path wihout ESP mount point.
+    loader_path="$(_formatted_efi_path "$win_bootmg_path")"
+    efibootmgr | grep -Fq -e "$loader_path" -e "${loader_path^^}" && return
+  fi
+  false
 }
 
 # Preserves old boot order
 _preserve_boot_order() {
   readarray -d ',' boot_order < <(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
+  _empty_or_win_entry "${#boot_order[@]}" && return
   old_boot_order=$(printf "%s" "${boot_order[@]:1}")
   efibootmgr -o "$old_boot_order,${boot_order[0]%%,}" > /dev/null
 }
@@ -526,13 +579,10 @@ _create_efi_entry() {
   uki="$1"
 
   # Extract pkgbase from UKI file path
-  pkgbase="${uki##*arch-}"
-  pkgbase="${pkgbase%%.efi}"
+  pkgbase="$(_pkgbase_from_uki_path "$uki")"
 
-  # Set loader path wihout ESP mount point.
-  loader_path="${uki#$ESP_MOUNT}"
   # Set loader path with backslashes
-  loader_path="${loader_path//\//\\}"
+  loader_path="$(_formatted_efi_path "$uki")"
 
   if ! _efi_entry_exists "$loader_path"; then
     local disk esp esp_name esp_number label
@@ -547,8 +597,7 @@ _create_efi_entry() {
     esp_number="$(</sys/class/block/"${esp_number}"/partition)"
 
     # Set OS label to NAME + (pkgbase): Example: Arch Linux (linux)
-    label="$(grep -Po '(?<=^NAME=").*(?=")' /etc/os-release)"
-    label="${label} ($pkgbase)"
+    label="$(_get_label "$pkgbase")"
 
     echo -e "${B}==>${NC} Creating EFI entry ${G}${label}${NC}..."
 
@@ -573,18 +622,13 @@ _remove_efi_entry() {
   local uki loader_path pkgbase label
   uki="$1"
 
-  # Extract pkgbase from UKI file path
-  pkgbase="${uki##*arch-}"
-  pkgbase="${pkgbase%%.efi}"
-
-  # Set loader path wihout ESP mount point.
-  loader_path="${uki#$ESP_MOUNT}"
   # Set loader path with backslashes
-  loader_path="${loader_path//\//\\}"
+  loader_path="$(_formatted_efi_path "$uki")"
 
-  # Set OS label to NAME + (pkgbase): Example: Arch Linux (linux)
-  label="$(grep -Po '(?<=^NAME=").*(?=")' /etc/os-release)"
-  label="${label} ($pkgbase)"
+  # Find all known labels
+  readarray -t labels < <(efibootmgr | \
+    grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
+    sed 's/.*\*[[:blank:]]\(.*\)[[:blank:]]\(.*\)/\1/')
 
   # Find all known efibootmgr boot numbers for the specified UKI
   readarray -t boot_nums < <(efibootmgr | \
@@ -592,7 +636,9 @@ _remove_efi_entry() {
     awk '{ print $1 }' | \
     sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
 
-  echo -e "${B}==>${NC} Removing EFI entry ${G}${label}${NC}..."
+  for label in "${labels[@]}"; do
+    echo -e "${B}==>${NC} Removing EFI entry ${G}${label}${NC}..."
+  done
 
   for boot_num in "${boot_nums[@]}"; do
     efibootmgr -b "$boot_num" -B > /dev/null

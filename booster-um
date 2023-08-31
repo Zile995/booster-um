@@ -142,7 +142,7 @@ _set_efi_path() {
     local boot_partition part_guid xbootldr_guid
     xbootldr_guid="bc13c2ff-59e6-4262-a352-b275fd6f7172"
     boot_partition="$(findmnt -nreo source "${boot_path}")"
-    part_guid="$(partx -g -o TYPE ${boot_partition})"
+    part_guid="$(partx -g -o TYPE "${boot_partition}")"
 
     if [[ "$part_guid" == "$xbootldr_guid" ]]; then
       ESP_MOUNT="$boot_path"
@@ -518,6 +518,7 @@ _efi_entry_exists() {
   efibootmgr | grep -Fq -e "${loader_path}" -e "${loader_path^^}"
 }
 
+# Extracts the pkgbase from known UKI file path
 _pkgbase_from_uki_path() {
   local uki pkgbase
   uki="$1"
@@ -528,18 +529,20 @@ _pkgbase_from_uki_path() {
   echo "$pkgbase"
 }
 
+# Formats the efi path to be readable by efibootmgr
 _formatted_efi_path() {
   local efi loader_path
   efi="$1"
 
   # Set loader path wihout ESP mount point.
-  efi_path="${uki#$ESP_MOUNT}"
+  efi_path="${efi#"$ESP_MOUNT"}"
   # Set loader path with backslashes
   efi_path="${efi_path//\//\\}"
   echo "$efi_path"
 }
 
-_get_label() {
+# Creates the EFI entry label
+_create_label() {
   local pkgbase="$1"
   # Get OS NAME
   label="$(grep -Po '(?<=^NAME=").*(?=")' /etc/os-release)"
@@ -548,11 +551,12 @@ _get_label() {
   echo "$label"
 }
 
+# Checks if the are no entries or if windows loader is the first entry
 _empty_or_win_entry() {
   local num_of_entries win_bootmg_path
   num_of_entries="$1"
   if [[ "$num_of_entries" -eq 2 ]]; then
-    win_bootmg_path=$(find "${ESP_MOUNT}" -type f -name "bootmgfw.efi" | head -n 1)
+    win_bootmg_path="$(find "${ESP_MOUNT}" -type f -name "bootmgfw.efi" | head -n 1)"
     [[ -z "$win_bootmg_path" ]] && return 1
 
     # Set loader path wihout ESP mount point.
@@ -562,12 +566,18 @@ _empty_or_win_entry() {
   false
 }
 
-# Preserves old boot order
+# Preserves the old boot order
 _preserve_boot_order() {
   readarray -d ',' boot_order < <(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
+
+  # Add a new entry to the beginning of the boot order if the Windows loader is first or there is no entry
   _empty_or_win_entry "${#boot_order[@]}" && return
-  old_boot_order=$(printf "%s" "${boot_order[@]:1}")
-  efibootmgr -o "$old_boot_order,${boot_order[0]%%,}" > /dev/null
+
+  # Otherwise remove the first element
+  old_boot_order="$(printf "%s" "${boot_order[@]:1}")"
+
+  # Change the boot order, add the new entry to the end of the boot order
+  efibootmgr -o "$old_boot_order,${boot_order[0]%%,}" -q
 }
 
 # Adds the EFI entry
@@ -585,7 +595,7 @@ _create_efi_entry() {
   loader_path="$(_formatted_efi_path "$uki")"
 
   if ! _efi_entry_exists "$loader_path"; then
-    local disk esp esp_name esp_number label
+    local disk esp esp_number label
     # Get Efi System Partition. Example: /dev/nvme0n1p1
     esp="$(findmnt -nreo source "${ESP_MOUNT}")"
 
@@ -597,7 +607,7 @@ _create_efi_entry() {
     esp_number="$(</sys/class/block/"${esp_number}"/partition)"
 
     # Set OS label to NAME + (pkgbase): Example: Arch Linux (linux)
-    label="$(_get_label "$pkgbase")"
+    label="$(_create_label "$pkgbase")"
 
     echo -e "${B}==>${NC} Creating EFI entry ${G}${label}${NC}..."
 
@@ -607,10 +617,37 @@ _create_efi_entry() {
       --disk "${disk}" \
       --part "${esp_number}" \
       --loader "${loader_path^^}" \
-      --unicode > /dev/null
+      --unicode -q
 
-    # Preserve boot order
+    # Preserve old boot order
     _preserve_boot_order
+  fi
+}
+
+# Sets the Linux entry as the first entry before Windows
+_set_linux_before_win() {
+  local win_bootmg_path
+  win_bootmg_path="$(find "${ESP_MOUNT}" -type f -name "bootmgfw.efi" | head -n 1)"
+  [[ -z "$win_bootmg_path" ]] && return
+
+  # Get first boot num in the boot order
+  readarray -td ',' boot_order < <(printf "%s" "$(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')")
+  [[ "${#boot_order[@]}" -eq 1 ]] && return
+  local first_boot_num="${boot_order[0]}"
+
+  # Get boot nums for Windows Boot Manager entry
+  loader_path="$(_formatted_efi_path "$win_bootmg_path")"
+  readarray -t win_boot_nums < <(efibootmgr | \
+    grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
+    awk '{ print $1 }' | \
+    sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
+
+  if printf '%s\0' "${win_boot_nums[@]}" | grep -Fqxz -- "${first_boot_num}"; then
+    local new_boot_order
+    boot_order[0]="${boot_order[1]}"
+    boot_order[1]="$first_boot_num"
+    new_boot_order="$(printf "%s," "${boot_order[@]}")"
+    efibootmgr -o "${new_boot_order%%,}" > /dev/null
   fi
 }
 
@@ -619,7 +656,7 @@ _remove_efi_entry() {
   # Return if efibootmgr doesn't exist
   if ! _command_exists efibootmgr || ! _should_create_efi_entry; then return; fi
 
-  local uki loader_path pkgbase label
+  local uki loader_path pkgbase
   uki="$1"
 
   # Set loader path with backslashes
@@ -643,6 +680,9 @@ _remove_efi_entry() {
   for boot_num in "${boot_nums[@]}"; do
     efibootmgr -b "$boot_num" -B > /dev/null
   done
+
+  # Make sure the Linux entry is the first EFI entry before Windows on removal
+  _set_linux_before_win
 }
 
 main "$@"; exit

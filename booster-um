@@ -294,7 +294,7 @@ _generate_uki() {
   done
 
   # Remove the leftovers (vmlinuz and booster initramfs)
-  _remove_leftovers "$pkgbase"
+  _remove_leftovers "$pkgbase" 1
 }
 
 # Generates UKI file for specified kernel package name
@@ -430,12 +430,23 @@ _remove_leftovers() {
   rm -f /boot/vmlinuz-"${pkgbase}"
   rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
 
+  local force_check="${2:-0}"
+  [[ "$force_check" -eq 0 ]] && return
+
+  local uki="${EFI_DIR}/arch-${pkgbase}.efi"
+  local fallback_uki="${EFI_DIR}/arch-${pkgbase}-fallback.efi"
+
   # Remove fallback UKI images in ESP if fallback generation is not enabled
   if ! _should_generate_fallback; then
-    local fallback_uki="${EFI_DIR}/arch-${pkgbase}-fallback.efi"
     _remove_from_db "$fallback_uki"
-    _remove_efi_entry "$fallback_uki"
+    _remove_efi_entry "$fallback_uki" && local fallback_removed=1
     rm -f "$fallback_uki"
+  fi
+
+  if ! _should_create_efi_entry; then
+    _remove_efi_entry "$uki"
+    [[ "$fallback_removed" -eq 1 ]] && return
+    _remove_efi_entry "$fallback_uki"
   fi
 }
 
@@ -609,7 +620,7 @@ _create_efi_entry() {
     # Set OS label to NAME + (pkgbase): Example: Arch Linux (linux)
     label="$(_create_label "$pkgbase")"
 
-    echo -e "${B}==>${NC} Creating EFI entry ${G}${label}${NC}..."
+    echo -e "${B} ->${NC} Creating EFI entry ${G}${label}${NC}..."
 
     # Add the EFI entry
     efibootmgr --create \
@@ -654,7 +665,7 @@ _set_linux_before_win() {
 # Removes the EFI entry
 _remove_efi_entry() {
   # Return if efibootmgr doesn't exist
-  if ! _command_exists efibootmgr || ! _should_create_efi_entry; then return; fi
+  if ! _command_exists efibootmgr; then return; fi
 
   local uki loader_path pkgbase
   uki="$1"
@@ -674,7 +685,7 @@ _remove_efi_entry() {
     sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
 
   for label in "${labels[@]}"; do
-    echo -e "${B}==>${NC} Removing EFI entry ${G}${label}${NC}..."
+    echo -e "${Y} ->${NC} Removing EFI entry ${Y}${label}${NC}..."
   done
 
   for boot_num in "${boot_nums[@]}"; do

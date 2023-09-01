@@ -303,14 +303,22 @@ _generate_uki() {
   _remove_leftovers "$pkgbase" 1
 }
 
+_get_array_index() {
+  local index=0
+  local -n array="$1"
+  local search="$2"
+  index="$(printf "%s\n" "${array[@]}" | grep -n "^${search}$" | sed "s/:${search}//")"
+  echo "$((index - 1))"
+}
+
 # Generates UKI file for specified kernel package name
 _generate_kernel_uki() {
   local pkgbase="$1"
   _check_pkgbase "$pkgbase"
 
   # Get the index of pkgbase
-  index="$(printf "%s\n" "${pkgbases[@]}" | grep -n "^${pkgbase}$" | sed "s/:${pkgbase}//")"
-  local kernel="${kernels[$((index - 1))]}"
+  index="$(_get_array_index pkgbases "$pkgbase")"
+  local kernel="${kernels[$index]}"
 
   local uname="${kernel##/usr/lib/modules/}"
 

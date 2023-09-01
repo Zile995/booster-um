@@ -180,8 +180,8 @@ _command_exists() {
 
 _check_config() {
   [[ ! -e "$CONFIG" ]] && config_valid=$((1-$?)) && return
-  config_valid=$(yq --exit-status "$CONFIG" &>/dev/null && echo "$?")
-  if [ $config_valid -ne 0 ]; then echo -e "${R}==>${NC} ${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."; fi
+  config_valid=$(yq --exit-status "$CONFIG" &>/dev/null; echo "$?")
+  if [ "$config_valid" -ne 0 ]; then echo -e "${R}==>${NC} ${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."; fi
 }
 
 # Checks if the creation of universal images is enabled
@@ -258,7 +258,7 @@ _generate_uki() {
     booster_inits+=("/boot/booster-${pkgbase}-fallback.img")
   fi
 
-  # Generate initramfs if needed files doesn't exist
+  # Regenerate initramfs if specified
   [[ "$regenerate" -eq 1 ]] && _generate_initramfs "/usr/lib/modules/${UNAME}"
 
   # Generate initramfs if needed files doesn't exist
@@ -266,10 +266,10 @@ _generate_uki() {
     _generate_initramfs "/usr/lib/modules/${UNAME}"
   fi
 
-  # cmdline
+  # Copy the current cmdline if it doesn't exist
   [[ ! -e "$CMDLINE" ]] && cp /proc/cmdline "$CMDLINE"
 
-  # UKI file path
+  # UKI file path, create EFI dir if it doesn't exist
   [[ ! -e "$EFI_DIR" ]] && mkdir -p "$EFI_DIR"
   local uki_path="${EFI_DIR}/arch-${pkgbase}"
 
@@ -282,26 +282,21 @@ _generate_uki() {
     # Set UKI fallback path
     [[ init_id -gt 0 ]] && uki_path="${uki_path}-fallback"
 
-    # Set the UKI path
+    # Set the UKI file with .efi exstension
     UKI="${uki_path}.efi"
 
-    # Build the UKI file
+    # Build the UKI file, sign it and create EFI entry
     /usr/lib/systemd/ukify build \
       --uname="${UNAME}" \
       --linux="${VMLINUZ}" \
       --initrd="${INITRD}" \
       --cmdline=@"${CMDLINE}" \
       --splash="${SPLASH}" \
-      --output="${UKI}" | tail -n 1
+      --output="${UKI}" | tail -n 1 && \
+      _sign_uki "$UKI" && _create_efi_entry "$UKI"
 
     # Remove the old initrd after creating the UKI file
     rm -f "$INITRD"
-
-    # Create EFI entry
-    _create_efi_entry "$UKI"
-
-    # Sign the UKI file
-    _sign_uki "$UKI"
   done
 
   # Remove the leftovers (vmlinuz and booster initramfs)
@@ -573,32 +568,35 @@ _create_label() {
   echo "$label"
 }
 
-# Checks if the are no entries or if windows loader is the first entry
-_empty_or_win_entry() {
-  local num_of_entries win_bootmg_path
-  num_of_entries="$1"
-  if [[ "$num_of_entries" -eq 2 ]]; then
-    win_bootmg_path="$(find "${ESP_MOUNT}" -type f -name "bootmgfw.efi" | head -n 1)"
-    [[ -z "$win_bootmg_path" ]] && return 1
+# Checks if Windows Boot Manager entry exists
+_win_entry_exists() {
+  local win_bootmg_path
+  win_bootmg_path="$(find "${ESP_MOUNT}" -type f -name "bootmgfw.efi" | head -n 1)"
+  [[ -z "$win_bootmg_path" ]] && return 1
 
-    # Set loader path wihout ESP mount point.
-    loader_path="$(_formatted_efi_path "$win_bootmg_path")"
-    efibootmgr | grep -Fq -e "$loader_path" -e "${loader_path^^}" && return
-  fi
-  false
+  # Set formatted loader path without ESP mount point
+  loader_path="$(_formatted_efi_path "$win_bootmg_path")"
+
+  # Check if loader path exists as efi entry
+  efibootmgr | grep -Fq -e "$loader_path" -e "${loader_path^^}"
 }
 
 # Preserves the old boot order
 _preserve_boot_order() {
+  if ! _should_preserve_boot_order; then return; fi
+
+  # Get the boot order list
   readarray -d ',' boot_order < <(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
+  local num_of_entries="${#boot_order[@]}"
 
-  # Add a new entry to the beginning of the boot order if the Windows loader is first or if there are no entries
-  _empty_or_win_entry "${#boot_order[@]}" && return
+  # If Windows Boot Manager exists and if Linux should always be first,
+  # return, because efibootmgr has already added entry to the beginning of the boot order list
+  if [[ "$num_of_entries" -eq 2 ]] && _linux_always_first && _win_entry_exists; then return; fi
 
-  # Otherwise remove the first element
+  # Otherwise restore the old boot order without the newly added entry
   old_boot_order="$(printf "%s" "${boot_order[@]:1}")"
 
-  # Change the boot order, add the new entry to the end of the boot order
+  # And add the newly added entry to the end of the old boot order list
   efibootmgr -o "$old_boot_order,${boot_order[0]%%,}" -q
 }
 
@@ -643,6 +641,8 @@ _create_efi_entry() {
 
     # Preserve old boot order
     _preserve_boot_order
+  else
+    _set_linux_before_win
   fi
 }
 
@@ -650,28 +650,40 @@ _create_efi_entry() {
 _set_linux_before_win() {
   if ! _linux_always_first; then return; fi
 
-  local win_bootmg_path
-  win_bootmg_path="$(find "${ESP_MOUNT}" -type f -name "bootmgfw.efi" | head -n 1)"
+  # Get Windows Boot Manager efi path
+  local win_bootmg_path="$(find "${ESP_MOUNT}" -type f -name "bootmgfw.efi" | head -n 1)"
   [[ -z "$win_bootmg_path" ]] && return
 
-  # Get first boot num in the boot order
+  # Get the boot order
   readarray -td ',' boot_order < <(printf "%s" "$(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')")
-  [[ "${#boot_order[@]}" -eq 1 ]] && return
+
+  # Get the first boot num in the boot order
   local first_boot_num="${boot_order[0]}"
 
-  # Get boot nums for Windows Boot Manager entry
+  # We do not care if only one entry exist
+  [[ "${#boot_order[@]}" -eq 1 ]] && return
+
+  # Get formatted Windows Boot Manager loader path
   loader_path="$(_formatted_efi_path "$win_bootmg_path")"
+
+  # Get boot numbers for Windows Boot Manager entry
   readarray -t win_boot_nums < <(efibootmgr | \
     grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
     awk '{ print $1 }' | \
     sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
 
+  # If Windows Boot Manager is the first entry in the boot order,
+  # then swap the places with the nearest efi entry in the boot order list
   if printf '%s\0' "${win_boot_nums[@]}" | grep -Fqxz -- "${first_boot_num}"; then
-    local new_boot_order
+    # Swap the places
     boot_order[0]="${boot_order[1]}"
     boot_order[1]="$first_boot_num"
-    new_boot_order="$(printf "%s," "${boot_order[@]}")"
-    efibootmgr -o "${new_boot_order%%,}" > /dev/null
+
+    # Put the modified order in string, because efimanager needs to process it
+    local new_boot_order="$(printf "%s," "${boot_order[@]}")"
+
+    # Change the boot order with efibootmgr
+    efibootmgr -o "${new_boot_order%%,}" -q
   fi
 }
 

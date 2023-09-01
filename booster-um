@@ -32,6 +32,9 @@ main() {
   CONFIG=/etc/booster-um.yaml
   BOOSTER_CONFIG=/etc/booster.yaml
 
+  # Check booster-um config
+  _check_config
+
   # EFI dir path
   _set_efi_path
 
@@ -175,49 +178,57 @@ _command_exists() {
   command -v -- "$1" > /dev/null 2>&1
 }
 
+_check_config() {
+  [[ ! -e "$CONFIG" ]] && config_valid=$((1-$?)) && return
+  config_valid=$(yq --exit-status "$CONFIG" &>/dev/null && echo "$?")
+  if [ $config_valid -ne 0 ]; then echo -e "${R}==>${NC} ${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."; fi
+}
+
 # Checks if the creation of universal images is enabled
 _is_universal() {
-  [[ ! -e "$BOOSTER_CONFIG" ]] && return 1
+  [[ "$config_valid" -eq 1 ]] && return 1
   yq '.universal == true' "$BOOSTER_CONFIG" | grep -Fqwx -- 'true'
 }
 
 # Checks if the booster-um should always generate a fallback UKI
 _should_generate_fallback() {
-  [[ ! -e "$CONFIG" ]] && return 1
-  yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true'
-  if [[ $? -eq 0 ]] && ! _is_universal; then
-    return
-  fi
+  [[ "$config_valid" -eq 1 ]] && return 1
+  if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' && ! _is_universal; then return; fi
   false
 }
 
 # Checks if the booster-um should create EFI entry
 _should_create_efi_entry() {
-  [[ ! -e "$CONFIG" ]] && return 1
-  yq '.create_efi_entry == true' "$CONFIG" | grep -Fqwx -- 'true'
-  if [[ $? -eq 0 ]]; then
-    return
-  fi
+  [[ "$config_valid" -eq 1 ]] && return 1
+  if yq '.efistub == true' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
+  false
+}
+
+# Checks if the booster-um should create EFI entry
+_should_preserve_boot_order() {
+  [[ "$config_valid" -eq 1 ]] && return
+  if ! yq '.efistub_config.preserve_boot_order == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
+  false
+}
+
+# Checks if the booster-um should create EFI entry
+_linux_always_first() {
+  [[ "$config_valid" -eq 1 ]] && return
+  if ! yq '.efistub_config.linux_always_first == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
 # Checks if the booster-um should always sign generated UKI
 _should_sign_uki() {
-  [[ ! -e "$CONFIG" ]] && return
-  yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'
-  if [[ $? -eq 1 ]]; then
-    return
-  fi
+  [[ "$config_valid" -eq 1 ]] && return
+  if ! yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
 # Checks if the booster-um should remove leftovers (vmlinuz and initramfs)
 _should_remove_leftovers() {
-  [[ ! -e "$CONFIG" ]] && return
-  yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'
-  if [[ $? -eq 1 ]]; then
-    return
-  fi
+  [[ "$config_valid" -eq 1 ]] && return
+  if ! yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
@@ -437,7 +448,7 @@ _remove_leftovers() {
   local fallback_uki="${EFI_DIR}/arch-${pkgbase}-fallback.efi"
 
   # Remove fallback UKI images in ESP if fallback generation is not enabled
-  if ! _should_generate_fallback; then
+  if ! _should_generate_fallback && [[ -e "$fallback_uki" ]]; then
     _remove_from_db "$fallback_uki"
     _remove_efi_entry "$fallback_uki" && local fallback_removed=1
     rm -f "$fallback_uki"
@@ -581,7 +592,7 @@ _empty_or_win_entry() {
 _preserve_boot_order() {
   readarray -d ',' boot_order < <(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
 
-  # Add a new entry to the beginning of the boot order if the Windows loader is first or there is no entry
+  # Add a new entry to the beginning of the boot order if the Windows loader is first or if there are no entries
   _empty_or_win_entry "${#boot_order[@]}" && return
 
   # Otherwise remove the first element
@@ -637,6 +648,8 @@ _create_efi_entry() {
 
 # Sets the Linux entry as the first entry before Windows
 _set_linux_before_win() {
+  if ! _linux_always_first; then return; fi
+
   local win_bootmg_path
   win_bootmg_path="$(find "${ESP_MOUNT}" -type f -name "bootmgfw.efi" | head -n 1)"
   [[ -z "$win_bootmg_path" ]] && return

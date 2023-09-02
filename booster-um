@@ -211,13 +211,6 @@ _should_preserve_boot_order() {
   false
 }
 
-# Checks if the booster-um should create EFI entry
-_linux_always_first() {
-  [[ "$config_valid" -eq 1 ]] && return
-  if ! yq '.efistub_config.linux_always_first == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
-  false
-}
-
 # Checks if the booster-um should always sign generated UKI
 _should_sign_uki() {
   [[ "$config_valid" -eq 1 ]] && return
@@ -232,7 +225,7 @@ _should_remove_leftovers() {
   false
 }
 
-# Basic function, generates one UKI
+# Generates one UKI
 _generate_uki() {
   # arguments
   local pkgbase="$1"
@@ -308,7 +301,7 @@ _get_array_index() {
   local -n array="$1"
   local search="$2"
   index="$(printf "%s\n" "${array[@]}" | grep -n "^${search}$" | sed "s/:${search}//")"
-  echo "$((index - 1))"
+  echo "$((index-1))"
 }
 
 # Generates UKI file for specified kernel package name
@@ -576,32 +569,14 @@ _create_label() {
   echo "$label"
 }
 
-# Checks if Windows Boot Manager entry exists
-_win_entry_exists() {
-  local win_bootmg_path
-  win_bootmg_path="$(find "${ESP_MOUNT}" -type f -name "bootmgfw.efi" | head -n 1)"
-  [[ -z "$win_bootmg_path" ]] && return 1
-
-  # Set formatted loader path without ESP mount point
-  loader_path="$(_formatted_efi_path "$win_bootmg_path")"
-
-  # Check if loader path exists as efi entry
-  efibootmgr | grep -Fq -e "$loader_path" -e "${loader_path^^}"
-}
-
 # Preserves the old boot order
 _preserve_boot_order() {
   if ! _should_preserve_boot_order; then return; fi
 
   # Get the boot order list
   readarray -d ',' boot_order < <(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
-  local num_of_entries="${#boot_order[@]}"
 
-  # If Windows Boot Manager exists and if Linux should always be first,
-  # return, because efibootmgr has already added entry to the beginning of the boot order list
-  if [[ "$num_of_entries" -eq 2 ]] && _linux_always_first && _win_entry_exists; then return; fi
-
-  # Otherwise restore the old boot order without the newly added entry
+  # Restore the old boot order without the newly added entry
   old_boot_order="$(printf "%s" "${boot_order[@]:1}")"
 
   # And add the newly added entry to the end of the old boot order list
@@ -649,49 +624,6 @@ _create_efi_entry() {
 
     # Preserve old boot order
     _preserve_boot_order
-  else
-    _set_linux_before_win
-  fi
-}
-
-# Sets the Linux entry as the first entry before Windows
-_set_linux_before_win() {
-  if ! _linux_always_first; then return; fi
-
-  # Get Windows Boot Manager efi path
-  local win_bootmg_path="$(find "${ESP_MOUNT}" -type f -name "bootmgfw.efi" | head -n 1)"
-  [[ -z "$win_bootmg_path" ]] && return
-
-  # Get the boot order
-  readarray -td ',' boot_order < <(printf "%s" "$(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')")
-
-  # Get the first boot num in the boot order
-  local first_boot_num="${boot_order[0]}"
-
-  # We do not care if only one entry exist
-  [[ "${#boot_order[@]}" -eq 1 ]] && return
-
-  # Get formatted Windows Boot Manager loader path
-  loader_path="$(_formatted_efi_path "$win_bootmg_path")"
-
-  # Get boot numbers for Windows Boot Manager entry
-  readarray -t win_boot_nums < <(efibootmgr | \
-    grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
-    awk '{ print $1 }' | \
-    sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
-
-  # If Windows Boot Manager is the first entry in the boot order,
-  # then swap the places with the nearest efi entry in the boot order list
-  if printf '%s\0' "${win_boot_nums[@]}" | grep -Fqxz -- "${first_boot_num}"; then
-    # Swap the places
-    boot_order[0]="${boot_order[1]}"
-    boot_order[1]="$first_boot_num"
-
-    # Put the modified order in string, because efimanager needs to process it
-    local new_boot_order="$(printf "%s," "${boot_order[@]}")"
-
-    # Change the boot order with efibootmgr
-    efibootmgr -o "${new_boot_order%%,}" -q
   fi
 }
 
@@ -724,9 +656,6 @@ _remove_efi_entry() {
   for boot_num in "${boot_nums[@]}"; do
     efibootmgr -b "$boot_num" -B > /dev/null
   done
-
-  # Make sure the Linux entry is the first EFI entry before Windows on removal
-  _set_linux_before_win
 }
 
 main "$@"; exit

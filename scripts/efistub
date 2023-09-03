@@ -72,7 +72,7 @@ _create_efi_entry() {
   if ! _efi_entry_exists "$loader_path"; then
     local disk esp esp_number label
     # Get Efi System Partition. Example: /dev/nvme0n1p1
-    esp="$(findmnt -nreo source "${ESP_MOUNT}")"
+    esp="$(findmnt --real -nreo source "${ESP_MOUNT}")"
 
     # Get the found boot partition disk. Example: /dev/nvme0n1
     disk="/dev/$(lsblk -r -n -o PKNAME "${esp}")"

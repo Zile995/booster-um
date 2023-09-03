@@ -64,7 +64,7 @@ _set_efi_path() {
   if [ "$esp_path" != "$boot_path" ]; then
     local boot_partition part_guid xbootldr_guid
     xbootldr_guid="bc13c2ff-59e6-4262-a352-b275fd6f7172"
-    boot_partition="$(findmnt -nreo source "${boot_path}")"
+    boot_partition="$(findmnt --real -nreo source "${boot_path}")"
     part_guid="$(partx -g -o TYPE "${boot_partition}")"
 
     if [[ "$part_guid" == "$xbootldr_guid" ]]; then

@@ -54,7 +54,7 @@ main() {
       ;;
     -R)
       # Remove booster*, vmlinuz* and UKI files for all installed kernels
-      # -F argument removes mentioned files + other initramfs* files and whole esp/EFI/Linux dir
+      # -F argument removes mentioned files + other initramfs* files and entire esp/EFI/Linux dir
       shift
       _remove_all_files "$1"
       ;;
@@ -93,13 +93,13 @@ Help options:
     -h, --help  Show this help message
 
 Generate options:
-    -g package  generate UKI file for specified kernel package name
-    -G          generate UKI files for all installed kernels
+    -g package  Generate UKI file for specified kernel package name
+    -G          Generate UKI files for all installed kernels
 
 Remove options:
-    -r package  remove UKI file for specified kernel package name
-    -R          remove all known booster-*, vmlinuz-* files from /boot and all known files from esp/EFI/Linux dir
-    -R -F       remove all mentioned files + other initramfs* files from /boot and whole esp/EFI/Linux dir
+    -r package  Remove UKI file for specified kernel package name
+    -R          Remove all known booster-*, vmlinuz-* files from /boot and all known files from esp/EFI/Linux dir
+    -R -F       Remove all mentioned files + other initramfs* files from /boot and entire esp/EFI/Linux dir
 
 Examples: $command_name -g linux
           $command_name -r linux

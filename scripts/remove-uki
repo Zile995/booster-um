@@ -35,6 +35,7 @@ _remove_leftovers() {
   if ! _should_remove_leftovers; then return; fi
 
   # Remove leftovers in /boot
+  rm -f /boot/.booster*
   rm -f /boot/.initrd-"${pkgbase}"
   rm -f /boot/vmlinuz-"${pkgbase}"
   rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}

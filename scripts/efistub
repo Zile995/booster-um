@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+
+set -e
+
+# Checks if efi entry exists
+_efi_entry_exists() {
+  local loader_path="$1"
+  efibootmgr | grep -Fq -e "${loader_path}" -e "${loader_path^^}"
+}
+
+# Extracts the pkgbase from known UKI file path
+_get_pkgbase_from_path() {
+  local uki pkgbase
+  uki="$1"
+
+  # Extract pkgbase from UKI file path
+  pkgbase="${uki##*arch-}"
+  pkgbase="${pkgbase%%.efi}"
+  echo "$pkgbase"
+}
+
+# Formats the efi path to be readable by efibootmgr
+_get_formatted_efi_path() {
+  local efi loader_path
+  efi="$1"
+
+  # Set loader path wihout ESP mount point.
+  efi_path="${efi#"$ESP_MOUNT"}"
+  # Set loader path with backslashes
+  efi_path="${efi_path//\//\\}"
+  echo "$efi_path"
+}
+
+# Returns the EFI entry label
+_get_label() {
+  local pkgbase="$1"
+  # Get OS NAME
+  label="$(grep -Po '(?<=^NAME=").*(?=")' /etc/os-release)"
+  # Set OS label to NAME + (pkgbase)
+  label="${label} ($pkgbase)"
+  echo "$label"
+}
+
+# Preserves the old boot order
+_preserve_boot_order() {
+  if ! _should_preserve_boot_order; then return; fi
+
+  # Get the boot order list
+  readarray -d ',' boot_order < <(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
+
+  # Restore the old boot order without the newly added entry
+  old_boot_order="$(printf "%s" "${boot_order[@]:1}")"
+
+  # And add the newly added entry to the end of the old boot order list
+  efibootmgr -o "$old_boot_order,${boot_order[0]%%,}" -q
+}
+
+# Adds the EFI entry
+_create_efi_entry() {
+  # Return if efibootmgr doesn't exist
+  if ! _command_exists efibootmgr || ! _should_create_efi_entry; then return; fi
+
+  local uki loader_path pkgbase
+  uki="$1"
+
+  # Extract pkgbase from UKI file path
+  pkgbase="$(_get_pkgbase_from_path "$uki")"
+
+  # Set loader path with backslashes
+  loader_path="$(_get_formatted_efi_path "$uki")"
+
+  if ! _efi_entry_exists "$loader_path"; then
+    local disk esp esp_number label
+    # Get Efi System Partition. Example: /dev/nvme0n1p1
+    esp="$(findmnt -nreo source "${ESP_MOUNT}")"
+
+    # Get the found boot partition disk. Example: /dev/nvme0n1
+    disk="/dev/$(lsblk -r -n -o PKNAME "${esp}")"
+
+    # Get Efi System Partition number. Example: For /dev/nvme0n1p1, the number is 1
+    esp_number="$(lsblk -r -n -o KNAME "${esp}")"
+    esp_number="$(</sys/class/block/"${esp_number}"/partition)"
+
+    # Set OS label to NAME + (pkgbase): Example: Arch Linux (linux)
+    label="$(_get_label "$pkgbase")"
+
+    echo -e "${B} ->${NC} Creating EFI entry ${G}${label}${NC}..."
+
+    # Add the EFI entry
+    efibootmgr --create \
+      --label "${label}" \
+      --disk "${disk}" \
+      --part "${esp_number}" \
+      --loader "${loader_path^^}" \
+      --unicode -q
+
+    # Preserve old boot order
+    _preserve_boot_order
+  fi
+}
+
+# Removes the EFI entry
+_remove_efi_entry() {
+  # Return if efibootmgr doesn't exist
+  if ! _command_exists efibootmgr; then return; fi
+
+  local uki loader_path pkgbase
+  uki="$1"
+
+  # Set loader path with backslashes
+  loader_path="$(_get_formatted_efi_path "$uki")"
+
+  # Find all known labels
+  readarray -t labels < <(efibootmgr | \
+    grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
+    sed 's/.*\*[[:blank:]]\(.*\)[[:blank:]]\(.*\)/\1/')
+
+  # Find all known efibootmgr boot numbers for the specified UKI
+  readarray -t boot_nums < <(efibootmgr | \
+    grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
+    awk '{ print $1 }' | \
+    sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
+
+  for label in "${labels[@]}"; do
+    echo -e "${Y} ->${NC} Removing EFI entry ${Y}${label}${NC}..."
+  done
+
+  for boot_num in "${boot_nums[@]}"; do
+    efibootmgr -b "$boot_num" -B > /dev/null
+  done
+}

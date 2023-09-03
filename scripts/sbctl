@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+set -e
+
+# Checks if the file is in the sbctl database
+_in_db() {
+  sbctl list-files --json | yq -r '.[].file' | grep -qw "$1"
+}
+
+# Signs the UKI file
+_sign_uki() {
+  local uki="$1"
+  # Return if sbctl is not installed or UKI should not be signed
+  if ! _command_exists sbctl || ! _should_sign_uki; then return; fi
+
+  if [[ "$sign" -eq 0 ]]; then
+    # Sbctl hook should sign the UKI file if it already exists in database
+    if _in_db "$uki"; then return; fi
+  fi
+
+  # Sign UKI file with sbctl
+  sbctl sign --save "$uki" || :
+}
+
+# Removes the file from the sbctl database
+_remove_from_db() {
+  local file="$1"
+
+  # Return if sbctl doesn't exists
+  if ! _command_exists sbctl; then return; fi
+
+  # Remove the file if it exists in the database
+  if _in_db "$file"; then
+    # Remove the file from sbctl database
+    sbctl remove-file "$file" || :
+  fi
+}

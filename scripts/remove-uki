@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+
+set -e
+
+# Removes all known booster initramfs, vmlinuz and UKI files
+# With -F argument it removes all initramfs-*, booster-*, vmlinuz-* files and esp/EFI/Linux dir
+_remove_all_files() {
+  local arg="$1"
+
+  case "$arg" in
+    -F)
+      echo -e "${Y}::${NC} Removing ${Y}all initramfs*, booster*, vmlinuz*${NC} files from ${Y}/boot${NC}..."
+
+      # Remove all initramfs-*, booster-*, vmlinuz-* files
+      rm -f /boot/{.initrd,initramfs,booster,vmlinuz}*
+
+      # Remove esp/EFI/Linux dir all its files from the sbctl database
+      _remove_efi_dir
+      ;;
+    "")
+      # Remove all known UKI files from esp/EFI/Linux dir
+      _remove_all_uki
+      ;;
+    *)
+      echo -e "${R}==>${NC} Unknown parameter ${R}$arg${NC} passed." >&2 && exit
+      ;;
+  esac
+  echo -e "${G}==>${NC} Done."
+}
+
+# Removes all known vmlinuz and initramfs files for specified kernel
+_remove_leftovers() {
+  local pkgbase="$1"
+
+  if ! _should_remove_leftovers; then return; fi
+
+  # Remove leftovers in /boot
+  rm -f /boot/.initrd-"${pkgbase}"
+  rm -f /boot/vmlinuz-"${pkgbase}"
+  rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
+
+  local force_check="${2:-0}"
+  [[ "$force_check" -eq 0 ]] && return
+
+  local uki="${EFI_DIR}/arch-${pkgbase}.efi"
+  local fallback_uki="${EFI_DIR}/arch-${pkgbase}-fallback.efi"
+
+  # Remove fallback UKI images in ESP if fallback generation is not enabled
+  if ! _should_generate_fallback && [[ -e "$fallback_uki" ]]; then
+    _remove_from_db "$fallback_uki"
+    _remove_efi_entry "$fallback_uki" && local fallback_removed=1
+    rm -f "$fallback_uki"
+  fi
+
+  if ! _should_create_efi_entry; then
+    _remove_efi_entry "$uki"
+    [[ "$fallback_removed" -eq 1 ]] && return
+    _remove_efi_entry "$fallback_uki"
+  fi
+}
+
+# Removes all known UKI files from esp/EFI/Linux dir
+_remove_all_uki() {
+  echo -e "${Y}::${NC} Removing ${Y}all known UKI files${NC}..."
+  for pkgbase in "${pkgbases[@]}"; do
+    # Remove the UKI file, vmlinuz and initramfs
+    _remove_uki "$pkgbase"
+  done
+}
+
+# Removes esp/EFI/Linux dir all its files from the sbctl database
+_remove_efi_dir() {
+  shopt -s nullglob
+
+  # Store all EFI files in array
+  local efi_files=("${EFI_DIR}"/*.efi)
+
+  for efi_file in "${efi_files[@]}"; do
+    # Remove the file from sbctl database
+    _remove_from_db "$efi_file"
+
+    # Remove EFI entries
+    _remove_efi_entry "$efi_file"
+  done
+
+  # Remove esp/EFI/Linux dir
+  echo -e "${Y}==>${NC} Removing ${Y}${EFI_DIR}${NC} dir..."
+  rm -rf "$EFI_DIR"
+
+  shopt -u nullglob
+}
+
+# Removes UKI file for specified kernel
+_remove_uki() {
+  local pkgbase="$1"
+  _check_pkgbase "$pkgbase"
+
+  # Store all UKI files in array
+  readarray -t uki_files < <(find "${EFI_DIR}" \
+    -type f \
+    -name "arch-${pkgbase}.efi" -o \
+    -name "arch-${pkgbase}-fallback.efi" 2> /dev/null)
+
+  for uki in "${uki_files[@]}"; do
+    # Remove the UKI file from sbctl database
+    echo -e "${Y}==>${NC} Removing ${Y}${uki}${NC} file..."
+    _remove_from_db "$uki"
+
+    # Remove the UKI file
+    rm -f "$uki"
+
+    # Remove the EFI entry
+    _remove_efi_entry "$uki"
+  done
+
+  # Remove the leftovers
+  _remove_leftovers "$pkgbase"
+}

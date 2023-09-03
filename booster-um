@@ -32,6 +32,9 @@ main() {
   CONFIG=/etc/booster-um.yaml
   BOOSTER_CONFIG=/etc/booster.yaml
 
+  # Check booster-um config
+  _check_config
+
   # EFI dir path
   _set_efi_path
 
@@ -142,9 +145,11 @@ _set_efi_path() {
     local boot_partition part_guid xbootldr_guid
     xbootldr_guid="bc13c2ff-59e6-4262-a352-b275fd6f7172"
     boot_partition="$(findmnt -nreo source "${boot_path}")"
-    part_guid="$(partx -g -o TYPE ${boot_partition})"
+    part_guid="$(partx -g -o TYPE "${boot_partition}")"
 
-    [[ "$part_guid" == "$xbootldr_guid" ]] && ESP_MOUNT="$boot_path"
+    if [[ "$part_guid" == "$xbootldr_guid" ]]; then
+      ESP_MOUNT="$boot_path"
+    fi
   fi
 
   EFI_DIR="${ESP_MOUNT}/EFI/Linux"
@@ -168,48 +173,59 @@ _in_db() {
   sbctl list-files --json | yq -r '.[].file' | grep -qw "$1"
 }
 
-# Check if sbctl command exists
-_sbctl_exists() {
-  command -v -- sbctl > /dev/null 2>&1
+# Check if specified command exists
+_command_exists() {
+  command -v -- "$1" > /dev/null 2>&1
+}
+
+_check_config() {
+  [[ ! -e "$CONFIG" ]] && config_valid=$((1-$?)) && return
+  config_valid=$(yq --exit-status "$CONFIG" &>/dev/null; echo "$?")
+  if [ "$config_valid" -ne 0 ]; then echo -e "${R}==>${NC} ${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."; fi
 }
 
 # Checks if the creation of universal images is enabled
 _is_universal() {
-  [[ ! -e "$BOOSTER_CONFIG" ]] && return 1
+  [[ "$config_valid" -eq 1 ]] && return 1
   yq '.universal == true' "$BOOSTER_CONFIG" | grep -Fqwx -- 'true'
 }
 
 # Checks if the booster-um should always generate a fallback UKI
 _should_generate_fallback() {
-  [[ ! -e "$CONFIG" ]] && return 1
-  yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true'
-  if [[ $? -eq 0 ]] && ! _is_universal; then
-    return
-  fi
+  [[ "$config_valid" -eq 1 ]] && return 1
+  if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' && ! _is_universal; then return; fi
+  false
+}
+
+# Checks if the booster-um should create EFI entry
+_should_create_efi_entry() {
+  [[ "$config_valid" -eq 1 ]] && return 1
+  if yq '.efistub == true' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
+  false
+}
+
+# Checks if the booster-um should create EFI entry
+_should_preserve_boot_order() {
+  [[ "$config_valid" -eq 1 ]] && return
+  if ! yq '.efistub_config.preserve_boot_order == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
 # Checks if the booster-um should always sign generated UKI
 _should_sign_uki() {
-  [[ ! -e "$CONFIG" ]] && return
-  yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'
-  if [[ $? -eq 1 ]]; then
-    return
-  fi
+  [[ "$config_valid" -eq 1 ]] && return
+  if ! yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
 # Checks if the booster-um should remove leftovers (vmlinuz and initramfs)
 _should_remove_leftovers() {
-  [[ ! -e "$CONFIG" ]] && return
-  yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'
-  if [[ $? -eq 1 ]]; then
-    return
-  fi
+  [[ "$config_valid" -eq 1 ]] && return
+  if ! yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
-# Basic function, generates one UKI
+# Generates one UKI
 _generate_uki() {
   # arguments
   local pkgbase="$1"
@@ -235,7 +251,7 @@ _generate_uki() {
     booster_inits+=("/boot/booster-${pkgbase}-fallback.img")
   fi
 
-  # Generate initramfs if needed files doesn't exist
+  # Regenerate initramfs if specified
   [[ "$regenerate" -eq 1 ]] && _generate_initramfs "/usr/lib/modules/${UNAME}"
 
   # Generate initramfs if needed files doesn't exist
@@ -243,10 +259,10 @@ _generate_uki() {
     _generate_initramfs "/usr/lib/modules/${UNAME}"
   fi
 
-  # cmdline
+  # Copy the current cmdline if it doesn't exist
   [[ ! -e "$CMDLINE" ]] && cp /proc/cmdline "$CMDLINE"
 
-  # UKI file path
+  # UKI file path, create EFI dir if it doesn't exist
   [[ ! -e "$EFI_DIR" ]] && mkdir -p "$EFI_DIR"
   local uki_path="${EFI_DIR}/arch-${pkgbase}"
 
@@ -259,27 +275,33 @@ _generate_uki() {
     # Set UKI fallback path
     [[ init_id -gt 0 ]] && uki_path="${uki_path}-fallback"
 
-    # Set the UKI path
+    # Set the UKI file with .efi exstension
     UKI="${uki_path}.efi"
 
-    # Build the UKI file
+    # Build the UKI file, sign it and create EFI entry
     /usr/lib/systemd/ukify build \
       --uname="${UNAME}" \
       --linux="${VMLINUZ}" \
       --initrd="${INITRD}" \
       --cmdline=@"${CMDLINE}" \
       --splash="${SPLASH}" \
-      --output="${UKI}" | tail -n 1
+      --output="${UKI}" | tail -n 1 && \
+      _sign_uki "$UKI" && _create_efi_entry "$UKI"
 
     # Remove the old initrd after creating the UKI file
     rm -f "$INITRD"
-
-    # Sign the UKI file
-    _sign_uki "$UKI"
   done
 
   # Remove the leftovers (vmlinuz and booster initramfs)
-  _remove_leftovers "$pkgbase"
+  _remove_leftovers "$pkgbase" 1
+}
+
+_get_array_index() {
+  local index=0
+  local -n array="$1"
+  local search="$2"
+  index="$(printf "%s\n" "${array[@]}" | grep -n "^${search}$" | sed "s/:${search}//")"
+  echo "$((index-1))"
 }
 
 # Generates UKI file for specified kernel package name
@@ -288,8 +310,8 @@ _generate_kernel_uki() {
   _check_pkgbase "$pkgbase"
 
   # Get the index of pkgbase
-  index="$(printf "%s\n" "${pkgbases[@]}" | grep -n "^${pkgbase}$" | sed "s/:${pkgbase}//")"
-  local kernel="${kernels[$((index - 1))]}"
+  index="$(_get_array_index pkgbases "$pkgbase")"
+  local kernel="${kernels[$index]}"
 
   local uname="${kernel##/usr/lib/modules/}"
 
@@ -369,7 +391,7 @@ _remove_from_db() {
   local file="$1"
 
   # Return if sbctl doesn't exists
-  if ! _sbctl_exists; then return; fi
+  if ! _command_exists sbctl; then return; fi
 
   # Remove the file if it exists in the database
   if _in_db "$file"; then
@@ -407,15 +429,31 @@ _remove_all_files() {
 # Removes all known vmlinuz and initramfs files for specified kernel
 _remove_leftovers() {
   local pkgbase="$1"
-  if _should_remove_leftovers; then
-    rm -f /boot/.initrd-"${pkgbase}"
-    rm -f /boot/vmlinuz-"${pkgbase}"
-    rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
-  fi
-  if ! _should_generate_fallback; then
-    local fallback_uki="${EFI_DIR}/arch-${pkgbase}-fallback.efi"
+
+  if ! _should_remove_leftovers; then return; fi
+
+  # Remove leftovers in /boot
+  rm -f /boot/.initrd-"${pkgbase}"
+  rm -f /boot/vmlinuz-"${pkgbase}"
+  rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
+
+  local force_check="${2:-0}"
+  [[ "$force_check" -eq 0 ]] && return
+
+  local uki="${EFI_DIR}/arch-${pkgbase}.efi"
+  local fallback_uki="${EFI_DIR}/arch-${pkgbase}-fallback.efi"
+
+  # Remove fallback UKI images in ESP if fallback generation is not enabled
+  if ! _should_generate_fallback && [[ -e "$fallback_uki" ]]; then
     _remove_from_db "$fallback_uki"
+    _remove_efi_entry "$fallback_uki" && local fallback_removed=1
     rm -f "$fallback_uki"
+  fi
+
+  if ! _should_create_efi_entry; then
+    _remove_efi_entry "$uki"
+    [[ "$fallback_removed" -eq 1 ]] && return
+    _remove_efi_entry "$fallback_uki"
   fi
 }
 
@@ -438,6 +476,9 @@ _remove_efi_dir() {
   for efi_file in "${efi_files[@]}"; do
     # Remove the file from sbctl database
     _remove_from_db "$efi_file"
+
+    # Remove EFI entries
+    _remove_efi_entry "$efi_file"
   done
 
   # Remove esp/EFI/Linux dir
@@ -453,20 +494,24 @@ _remove_uki() {
   _check_pkgbase "$pkgbase"
 
   # Store all UKI files in array
-  readarray -t efi_files < <(find "${EFI_DIR}" \
+  readarray -t uki_files < <(find "${EFI_DIR}" \
     -type f \
     -name "arch-${pkgbase}.efi" -o \
     -name "arch-${pkgbase}-fallback.efi" 2> /dev/null)
 
-  for efi_file in "${efi_files[@]}"; do
-    # Remove the EFI file from sbctl database
-    echo -e "${Y}==>${NC} Removing ${Y}${efi_file}${NC} file..."
-    _remove_from_db "$efi_file"
+  for uki in "${uki_files[@]}"; do
+    # Remove the UKI file from sbctl database
+    echo -e "${Y}==>${NC} Removing ${Y}${uki}${NC} file..."
+    _remove_from_db "$uki"
 
-    # Remove the EFI file
-    rm -f "$efi_file"
+    # Remove the UKI file
+    rm -f "$uki"
+
+    # Remove the EFI entry
+    _remove_efi_entry "$uki"
   done
 
+  # Remove the leftovers
   _remove_leftovers "$pkgbase"
 }
 
@@ -474,7 +519,7 @@ _remove_uki() {
 _sign_uki() {
   local uki="$1"
   # Return if sbctl is not installed or UKI should not be signed
-  if ! _sbctl_exists || ! _should_sign_uki; then return; fi
+  if ! _command_exists sbctl || ! _should_sign_uki; then return; fi
 
   if [[ "$sign" -eq 0 ]]; then
     # Sbctl hook should sign the UKI file if it already exists in database
@@ -483,6 +528,134 @@ _sign_uki() {
 
   # Sign UKI file with sbctl
   sbctl sign --save "$uki" || :
+}
+
+# Checks if efi entry exists
+_efi_entry_exists() {
+  local loader_path="$1"
+  efibootmgr | grep -Fq -e "${loader_path}" -e "${loader_path^^}"
+}
+
+# Extracts the pkgbase from known UKI file path
+_pkgbase_from_uki_path() {
+  local uki pkgbase
+  uki="$1"
+
+  # Extract pkgbase from UKI file path
+  pkgbase="${uki##*arch-}"
+  pkgbase="${pkgbase%%.efi}"
+  echo "$pkgbase"
+}
+
+# Formats the efi path to be readable by efibootmgr
+_formatted_efi_path() {
+  local efi loader_path
+  efi="$1"
+
+  # Set loader path wihout ESP mount point.
+  efi_path="${efi#"$ESP_MOUNT"}"
+  # Set loader path with backslashes
+  efi_path="${efi_path//\//\\}"
+  echo "$efi_path"
+}
+
+# Creates the EFI entry label
+_create_label() {
+  local pkgbase="$1"
+  # Get OS NAME
+  label="$(grep -Po '(?<=^NAME=").*(?=")' /etc/os-release)"
+  # Set OS label to NAME + (pkgbase)
+  label="${label} ($pkgbase)"
+  echo "$label"
+}
+
+# Preserves the old boot order
+_preserve_boot_order() {
+  if ! _should_preserve_boot_order; then return; fi
+
+  # Get the boot order list
+  readarray -d ',' boot_order < <(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
+
+  # Restore the old boot order without the newly added entry
+  old_boot_order="$(printf "%s" "${boot_order[@]:1}")"
+
+  # And add the newly added entry to the end of the old boot order list
+  efibootmgr -o "$old_boot_order,${boot_order[0]%%,}" -q
+}
+
+# Adds the EFI entry
+_create_efi_entry() {
+  # Return if efibootmgr doesn't exist
+  if ! _command_exists efibootmgr || ! _should_create_efi_entry; then return; fi
+
+  local uki loader_path pkgbase
+  uki="$1"
+
+  # Extract pkgbase from UKI file path
+  pkgbase="$(_pkgbase_from_uki_path "$uki")"
+
+  # Set loader path with backslashes
+  loader_path="$(_formatted_efi_path "$uki")"
+
+  if ! _efi_entry_exists "$loader_path"; then
+    local disk esp esp_number label
+    # Get Efi System Partition. Example: /dev/nvme0n1p1
+    esp="$(findmnt -nreo source "${ESP_MOUNT}")"
+
+    # Get the found boot partition disk. Example: /dev/nvme0n1
+    disk="/dev/$(lsblk -r -n -o PKNAME "${esp}")"
+
+    # Get Efi System Partition number. Example: For /dev/nvme0n1p1, the number is 1
+    esp_number="$(lsblk -r -n -o KNAME "${esp}")"
+    esp_number="$(</sys/class/block/"${esp_number}"/partition)"
+
+    # Set OS label to NAME + (pkgbase): Example: Arch Linux (linux)
+    label="$(_create_label "$pkgbase")"
+
+    echo -e "${B} ->${NC} Creating EFI entry ${G}${label}${NC}..."
+
+    # Add the EFI entry
+    efibootmgr --create \
+      --label "${label}" \
+      --disk "${disk}" \
+      --part "${esp_number}" \
+      --loader "${loader_path^^}" \
+      --unicode -q
+
+    # Preserve old boot order
+    _preserve_boot_order
+  fi
+}
+
+# Removes the EFI entry
+_remove_efi_entry() {
+  # Return if efibootmgr doesn't exist
+  if ! _command_exists efibootmgr; then return; fi
+
+  local uki loader_path pkgbase
+  uki="$1"
+
+  # Set loader path with backslashes
+  loader_path="$(_formatted_efi_path "$uki")"
+
+  # Find all known labels
+  readarray -t labels < <(efibootmgr | \
+    grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
+    sed 's/.*\*[[:blank:]]\(.*\)[[:blank:]]\(.*\)/\1/')
+
+  # Find all known efibootmgr boot numbers for the specified UKI
+  readarray -t boot_nums < <(efibootmgr | \
+    grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
+    awk '{ print $1 }' | \
+    sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
+
+  for label in "${labels[@]}"; do
+    echo -e "${Y} ->${NC} Removing EFI entry ${Y}${label}${NC}..."
+  done
+
+  for boot_num in "${boot_nums[@]}"; do
+    efibootmgr -b "$boot_num" -B > /dev/null
+  done
 }
 
 main "$@"; exit

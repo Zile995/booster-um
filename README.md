@@ -12,6 +12,9 @@ The script can only be used on Arch Linux.
    * sbctl - Sign UKI files
    * efibootmgr - Create EFI entries
 
+## Installation
+Clone the repo or download the [PKGBUILD](https://github.com/Zile995/booster-um/blob/main/PKGBUILD) and simply run: `makepkg -si`
+
 ## Default configuration
 * booster-um by default:
   * Signs generated UKI files with sbctl **if installed**

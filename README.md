@@ -38,15 +38,16 @@ Clone the repo or download the [PKGBUILD](https://github.com/Zile995/booster-um/
 
 * Default `booster -G` output and `/boot`|`/esp/EFI/LINUX` content:
   * <details>
-    <summary>Generating UKI for all kernels</summary>
+    <summary>Generation of UKI files</summary>
 
-    ![generation](https://github.com/Zile995/booster-um/assets/32335484/77ef01ee-a044-4f53-964a-b4748579d43c)
+    ![generation](https://github.com/Zile995/booster-um/assets/32335484/f072acb4-8fb3-440c-8264-9cd21b7b8333)
+
 
     </details>
   * <details>
     <summary>/boot and /esp/EFI/LINUX content</summary>
 
-    ![path](https://github.com/Zile995/booster-um/assets/32335484/ef21face-a364-4cee-b4d2-60e5a60187be)
+    ![content](https://github.com/Zile995/booster-um/assets/32335484/fe0a2741-6f13-45a1-b987-93c38fedba29)
 
     </details>
 

@@ -2,6 +2,11 @@
 
 set -e
 
+# Flag which controls UKI signing
+# If this value is set to 0, then the UKI file will be signed if it does not exist in the sbctl database
+# If this value is set to 1, then the UKI file will be always signed
+sign=1
+
 # Checks if the file is in the sbctl database
 _in_db() {
   sbctl list-files --json | yq -r '.[].file' | grep -qw "$1"

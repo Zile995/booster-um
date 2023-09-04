@@ -10,14 +10,6 @@ B='\033[1;34m' # Blue
 Y='\033[1;33m' # Yellow
 NC='\033[0m'   # No color
 
-# Common paths
-CMDLINE=/etc/kernel/cmdline
-SPLASH=/usr/share/systemd/bootctl/splash-arch.bmp
-
-# Configs
-CONFIG=/etc/booster-um.yaml
-BOOSTER_CONFIG=/etc/booster.yaml
-
 # Checks if specified command exists
 _command_exists() {
   command -v -- "$1" > /dev/null 2>&1

@@ -2,6 +2,10 @@
 
 set -e
 
+# Common paths
+CMDLINE=/etc/kernel/cmdline
+SPLASH=/usr/share/systemd/bootctl/splash-arch.bmp
+
 # Generates one UKI
 _generate_uki() {
   # arguments

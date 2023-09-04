@@ -25,9 +25,6 @@ main() {
   # Find all installed kernels
   _find_kernels
 
-  # Flag which controls UKI signing
-  sign=1
-
   case "${arg}" in
     -g)
       # It will always regenerate initramfs

@@ -4,6 +4,10 @@ set -e
 
 config_valid=0
 
+# Configs
+CONFIG=/etc/booster-um.yaml
+BOOSTER_CONFIG=/etc/booster.yaml
+
 # Checks if booster-um.yaml config is valid
 _check_config() {
   [[ ! -e $CONFIG ]] && config_valid=$((1-$?)) && return

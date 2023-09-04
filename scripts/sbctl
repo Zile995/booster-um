@@ -13,7 +13,7 @@ _sign_uki() {
   # Return if sbctl is not installed or UKI should not be signed
   if ! _command_exists sbctl || ! _should_sign_uki; then return; fi
 
-  if [[ "$sign" -eq 0 ]]; then
+  if [[ $sign -eq 0 ]]; then
     # Sbctl hook should sign the UKI file if it already exists in database
     if _in_db "$uki"; then return; fi
   fi

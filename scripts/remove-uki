@@ -41,13 +41,13 @@ _remove_leftovers() {
   rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
 
   local force_check="${2:-0}"
-  [[ "$force_check" -eq 0 ]] && return
+  [[ $force_check -eq 0 ]] && return
 
   local uki="${EFI_DIR}/arch-${pkgbase}.efi"
   local fallback_uki="${EFI_DIR}/arch-${pkgbase}-fallback.efi"
 
   # Remove fallback UKI images in ESP if fallback generation is not enabled
-  if ! _should_generate_fallback && [[ -e "$fallback_uki" ]]; then
+  if ! _should_generate_fallback && [[ -e $fallback_uki ]]; then
     _remove_from_db "$fallback_uki"
     _remove_efi_entry "$fallback_uki" && local fallback_removed=1
     rm -f "$fallback_uki"
@@ -55,7 +55,7 @@ _remove_leftovers() {
 
   if ! _should_create_efi_entry; then
     _remove_efi_entry "$uki"
-    [[ "$fallback_removed" -eq 1 ]] && return
+    [[ $fallback_removed -eq 1 ]] && return
     _remove_efi_entry "$fallback_uki"
   fi
 }

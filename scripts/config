@@ -6,50 +6,50 @@ config_valid=0
 
 # Checks if booster-um.yaml config is valid
 _check_config() {
-  [[ ! -e "$CONFIG" ]] && config_valid=$((1-$?)) && return
+  [[ ! -e $CONFIG ]] && config_valid=$((1-$?)) && return
   config_valid=$(yq --exit-status "$CONFIG" &>/dev/null; echo "$?")
-  if [ "$config_valid" -ne 0 ]; then
+  if [[ $config_valid -ne 0 ]]; then
     echo -e "${R}==>${NC} ${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."
   fi
 }
 
 # Checks if the creation of universal images is enabled
 _is_universal() {
-  [[ "$config_valid" -eq 1 ]] && return 1
+  [[ $config_valid -eq 1 ]] && return 1
   yq '.universal == true' "$BOOSTER_CONFIG" | grep -Fqwx -- 'true'
 }
 
 # Checks if the booster-um should always generate a fallback UKI
 _should_generate_fallback() {
-  [[ "$config_valid" -eq 1 ]] && return 1
+  [[ $config_valid -eq 1 ]] && return 1
   if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' && ! _is_universal; then return; fi
   false
 }
 
 # Checks if the booster-um should create EFI entry
 _should_create_efi_entry() {
-  [[ "$config_valid" -eq 1 ]] && return 1
+  [[ $config_valid -eq 1 ]] && return 1
   if yq '.efistub == true' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
 # Checks if the booster-um should create EFI entry
 _should_preserve_boot_order() {
-  [[ "$config_valid" -eq 1 ]] && return
+  [[ $config_valid -eq 1 ]] && return
   if ! yq '.efistub_config.preserve_boot_order == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
 # Checks if the booster-um should always sign generated UKI
 _should_sign_uki() {
-  [[ "$config_valid" -eq 1 ]] && return
+  [[ $config_valid -eq 1 ]] && return
   if ! yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
 # Checks if the booster-um should remove leftovers (vmlinuz and initramfs)
 _should_remove_leftovers() {
-  [[ "$config_valid" -eq 1 ]] && return
+  [[ $config_valid -eq 1 ]] && return
   if ! yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }

@@ -2,6 +2,31 @@
 
 set -e
 
+# Sets EFI dir path
+_set_efi_path() {
+  local esp_path boot_path
+  esp_path="$(bootctl -p)"
+  boot_path="$(bootctl -x)"
+
+  ESP_MOUNT="$esp_path"
+
+  if [ "$esp_path" != "$boot_path" ]; then
+    local boot_partition part_guid xbootldr_guid
+    xbootldr_guid="bc13c2ff-59e6-4262-a352-b275fd6f7172"
+    boot_partition="$(findmnt --real -nreo source "${boot_path}")"
+    part_guid="$(partx -g -o TYPE "${boot_partition}")"
+
+    if [[ "$part_guid" == "$xbootldr_guid" ]]; then
+      ESP_MOUNT="$boot_path"
+    fi
+  fi
+
+  EFI_DIR="${ESP_MOUNT}/EFI/Linux"
+
+  # Trigger any potential automounts
+  stat -- /boot /efi "$EFI_DIR" &>/dev/null || :
+}
+
 # Checks if efi entry exists
 _efi_entry_exists() {
   local loader_path="$1"

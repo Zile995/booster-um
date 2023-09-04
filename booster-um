@@ -31,15 +31,11 @@ main() {
   # Flag which controls UKI signing
   sign=1
 
-  # Flag which controls initramfs regeneration
-  regenerate=0
-
   case "${arg}" in
     -g)
       # It will always regenerate initramfs
       # Generate UKI file for specified kernel package name
       shift
-      regenerate=1
       _generate_kernel_uki "$1"
       ;;
     -r)

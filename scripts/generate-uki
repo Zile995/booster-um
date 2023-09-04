@@ -28,19 +28,17 @@ _generate_uki() {
     booster_inits+=("/boot/booster-${pkgbase}-fallback.img")
   fi
 
-  # Regenerate initramfs if specified
-  [[ "$regenerate" -eq 1 ]] && _generate_initramfs "/usr/lib/modules/${UNAME}"
-
-  # Generate initramfs if needed files doesn't exist
-  if ! stat -- "${booster_inits[@]}" > /dev/null 2>&1 || [[ ! -e "$VMLINUZ" ]]; then
-    _generate_initramfs "/usr/lib/modules/${UNAME}"
+  # Return if required initramfs files do not exist
+  if ! stat -- "${booster_inits[@]}" > /dev/null 2>&1 || [[ ! -e $VMLINUZ ]]; then
+    echo -e "${R}==>${NC} Unable to generate UKI for ${R}${pkgbase}${NC}..."
+    return
   fi
 
   # Copy the current cmdline if it doesn't exist
-  [[ ! -e "$CMDLINE" ]] && cp /proc/cmdline "$CMDLINE"
+  [[ ! -e $CMDLINE ]] && cp /proc/cmdline "$CMDLINE"
 
   # UKI file path, create EFI dir if it doesn't exist
-  [[ ! -e "$EFI_DIR" ]] && mkdir -p "$EFI_DIR"
+  [[ ! -e $EFI_DIR ]] && mkdir -p "$EFI_DIR"
   local uki_path="${EFI_DIR}/arch-${pkgbase}"
 
   for init_id in "${!booster_inits[@]}"; do
@@ -50,7 +48,7 @@ _generate_uki() {
     cat -- "${microcodes[@]}" "$booster_initramfs" > "$INITRD"
 
     # Set UKI fallback path
-    [[ init_id -gt 0 ]] && uki_path="${uki_path}-fallback"
+    [[ $init_id -gt 0 ]] && uki_path="${uki_path}-fallback"
 
     # Set the UKI file with .efi exstension
     UKI="${uki_path}.efi"
@@ -83,6 +81,9 @@ _generate_kernel_uki() {
   local kernel="${kernels[$index]}"
 
   local uname="${kernel##/usr/lib/modules/}"
+
+  # Generate initramfs
+  _generate_initramfs "$kernel" || return
 
   # Generate and sign UKI file
   _generate_uki "$pkgbase" "$uname"
@@ -118,23 +119,41 @@ _generate_initramfs() {
   local kernel="$1"
   read -r pkgbase < "${kernel}/pkgbase"
   local uname="${kernel##/usr/lib/modules/}"
-  local vmlinuz="/boot/vmlinuz-${pkgbase}"
   local initramfs="/boot/booster-${pkgbase}.img"
 
   echo -e "${B}==>${NC} Generating initramfs for ${G}${pkgbase}${NC}..."
 
   # Install the vmlinuz
-  install -Dm644 "${kernel}/vmlinuz" "$vmlinuz"
+  if ! _install_vmlinuz "$pkgbase" "$uname"; then return 1; fi
 
   # Generate initramfs
-  booster build --force --kernel-version "$uname" "$initramfs" || (
+  if ! booster build --force --kernel-version "$uname" "$initramfs"; then
     echo -e "${R}==>${NC} Unable to generate initramfs for ${R}${pkgbase}${NC}..."
-    rm -f "$vmlinuz"
-    exit 1
-  )
+    _remove_leftovers "$pkgbase" 1
+    return 1
+  fi
 
   # Generate fallback initramfs
   _generate_fallback_initramfs "$pkgbase" "$uname"
+}
+
+# Installs the vmlinuz
+_install_vmlinuz() {
+  local pkgbase="$1"
+  local uname="$2"
+
+  local boot_vmlinuz="/boot/vmlinuz-${pkgbase}"
+  [[ -e $boot_vmlinuz ]] && return
+
+  local kernel="/usr/lib/modules/${uname}"
+  local module_vmlinuz="${kernel}/vmlinuz"
+  if [[ ! -e $module_vmlinuz ]]; then
+    echo -e "${R}==>${NC} Unable to find vmlinuz for ${R}${pkgbase}${NC}..."
+    return 1
+  fi
+
+  # Install the vmlinuz
+  install -Dm644 "$module_vmlinuz" "$boot_vmlinuz"
 }
 
 # Generates fallback initramfs
@@ -150,7 +169,7 @@ _generate_fallback_initramfs() {
 # Generates booster initramfs, vmlinuz and UKI files for all kernels
 _generate_all_files() {
   echo -e "${B}::${W} Generating initramfs for all installed kernels...${NC}"
-  _regenerate_images
+  _regenerate_images || :
   echo -e "${B}::${W} Generating UKI files for all installed kernels...${NC}"
   _generate_all_uki
 }

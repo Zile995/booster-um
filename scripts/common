@@ -73,4 +73,7 @@ _set_efi_path() {
   fi
 
   EFI_DIR="${ESP_MOUNT}/EFI/Linux"
+
+  # Trigger any potential automounts
+  stat -- /boot /efi "$EFI_DIR" &>/dev/null || :
 }

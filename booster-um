@@ -22,9 +22,6 @@ main() {
   # EFI dir path
   _set_efi_path
 
-  # Trigger any potential automounts
-  stat -- /boot /efi "$EFI_DIR" &>/dev/null || :
-
   # Find all installed kernels
   _find_kernels
 

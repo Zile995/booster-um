@@ -23,6 +23,10 @@ pkgver() {
 package() {
   cd "$pkgname"
 
+  # Create config file
+  mkdir "${pkgdir}/etc/"
+  touch "${pkgdir}/etc/booster-um.yaml"
+
   # Install the booster-um
   install -Dm0755 booster-um -t "${pkgdir}/usr/bin"
 

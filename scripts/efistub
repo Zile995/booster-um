@@ -2,6 +2,16 @@
 
 set -e
 
+# EFI System Partition. Examples: /dev/nvme0n1p1, /dev/sda1
+# UKI files will be created on this partition
+declare -g ESP
+
+# EFI dir path of the directory where the UKI files are located. Example: esp/EFI/Linux
+declare -g EFI_DIR
+
+# EFI System Partition mount point. Examples: /boot, /efi, /boot/efi
+declare -g ESP_MOUNT
+
 # Sets EFI dir path
 _set_efi_path() {
   local esp_path boot_path
@@ -12,16 +22,27 @@ _set_efi_path() {
 
   if [ "$esp_path" != "$boot_path" ]; then
     local boot_partition part_guid xbootldr_guid
+    # XBOOTLDR GUID
     xbootldr_guid="bc13c2ff-59e6-4262-a352-b275fd6f7172"
+
+    # BOOT partition. Example: /dev/nvme0n1p4
     boot_partition="$(findmnt --real -nreo source "${boot_path}")"
+
+    # Partition GUID TYPE
     part_guid="$(partx -g -o TYPE "${boot_partition}")"
 
+    # If boot partition has the XBOOTLDR GUID value, set the mount path
     if [[ "$part_guid" == "$xbootldr_guid" ]]; then
+      ESP="$boot_partition"
       ESP_MOUNT="$boot_path"
     fi
   fi
 
   EFI_DIR="${ESP_MOUNT}/EFI/Linux"
+
+  if [[ -z $ESP ]]; then
+    ESP="$(findmnt --real -nreo source "${ESP_MOUNT}")"
+  fi
 
   # Trigger any potential automounts
   stat -- /boot /efi "$EFI_DIR" &>/dev/null || :
@@ -29,8 +50,10 @@ _set_efi_path() {
 
 # Checks if efi entry exists
 _efi_entry_exists() {
-  local loader_path="$1"
-  efibootmgr | grep -Fq -e "${loader_path}" -e "${loader_path^^}"
+  local loader_path esp_partuuid
+  loader_path="$1"
+  esp_partuuid="$(partx -g -o UUID "${ESP}")"
+  efibootmgr | grep -w "$esp_partuuid" | grep -Fwq -e "${loader_path}" -e "${loader_path^^}"
 }
 
 # Extracts the pkgbase from known UKI file path
@@ -46,7 +69,7 @@ _get_pkgbase_from_path() {
 
 # Formats the efi path to be readable by efibootmgr
 _get_formatted_efi_path() {
-  local efi loader_path
+  local efi
   efi="$1"
 
   # Set loader path wihout ESP mount point.

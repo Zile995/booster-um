@@ -6,7 +6,7 @@ main() {
   local arg="$1"
 
   case ${arg} in
-    -h|--help)
+    ""|-h|--help)
       show_help
       exit
       ;;

@@ -54,7 +54,7 @@ main() {
       # UKI file will not be signed if it already exists in the sbctl database
       # It will not regenerate initramfs. Initramfs will be generated on kernel update by booster hook.
       shift
-      sign=0
+      always_sign=0
       _generate_fallback_initramfs "$1" "$2"
       _generate_uki "$1" "$2"
       ;;
@@ -62,7 +62,7 @@ main() {
       # It will always regenerate initramfs
       # This argument is used in libalpm hook
       # Generate UKI files for all installed kernels
-      sign=0
+      always_sign=0
       _generate_all_files
       ;;
     *)

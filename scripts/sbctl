@@ -19,10 +19,8 @@ _sign_uki() {
   # Also return if the UKI should not be signed
   if [[ $sbsign -eq 1 ]] || ! _command_exists sbctl || ! _should_sign_uki; then return; fi
 
-  if [[ $sign -eq 0 ]]; then
-    # Sbctl hook should sign the UKI file if it already exists in database
-    if _in_db "$uki"; then return; fi
-  fi
+  # Sbctl hook should sign the UKI file if it already exists in database
+  if [[ $sign -eq 0 ]] && _in_db "$uki"; then return; fi
 
   # Sign UKI file with sbctl
   sbctl sign --save "$uki" || :

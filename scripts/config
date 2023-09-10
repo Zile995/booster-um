@@ -75,3 +75,16 @@ _get_sbsign_property() {
   [[ $value == null ]] && return
   echo "$value"
 }
+
+_get_splash_path() {
+  # Set the default arch linux splash
+  local default_splash=/usr/share/systemd/bootctl/splash-arch.bmp
+  [[ ! -e $default_splash ]] && return
+  [[ $config_valid -eq 1 ]] && return "$default_splash"
+
+  local splash="$(yq '.splash' "$CONFIG")"
+  if [[ $splash == null ]] || [[ ! -e $splash ]]; then
+    splash="$default_splash"
+  fi
+  echo "$splash"
+}

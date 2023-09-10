@@ -4,7 +4,6 @@ set -e
 
 # Common paths
 declare -g CMDLINE=/etc/kernel/cmdline
-declare -g SPLASH=/usr/share/systemd/bootctl/splash-arch.bmp
 
 # Generates one UKI
 _generate_uki() {
@@ -12,10 +11,13 @@ _generate_uki() {
   local pkgbase="$1"
 
   # systemd-ukify paths
-  local UNAME VMLINUZ UKI INITRD
+  local SPLASH UNAME VMLINUZ UKI INITRD
   UNAME="$2"
 
   echo -e "${B}==>${NC} Generating UKI for ${G}${pkgbase}${NC}..."
+
+  # Splash file
+  SPLASH="$(_get_splash_path)"
 
   # vmlinuz path
   VMLINUZ="/boot/vmlinuz-${pkgbase}"
@@ -78,7 +80,7 @@ _generate_uki() {
       --linux="$VMLINUZ" \
       --initrd="$INITRD" \
       --cmdline=@"$CMDLINE" \
-      --splash="$SPLASH" "${sign_args[@]}" \
+      ${SPLASH:+"--splash=$SPLASH"} "${sign_args[@]}" \
       --output="$UKI" | tail -n 1 && \
       _sign_uki "$UKI" && _create_efi_entry "$UKI"
 

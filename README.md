@@ -75,13 +75,19 @@ booster-um config file is located at `/etc/booster-um.yaml`. By default it is em
  ```
 
 * `sign_uki` manages the UKI signing. If enabled, `sbctl`, or `sbsign`, will sign generated UKI files
-* `remove_leftovers` manages the removal of leftovers. Besides the vmlinuz and booster files, EFI entries, fallback images and kernel cmdlines are treated as leftovers, they will be removed if `efistub`, `cmdline_per_kernel`, `generate_fallback` options are disabled. If enabled, leftovers will always be removed after generating or removing UKI files
-* `cmdline_per_kernel` manages the creation of the cmdline per kernel. If enabled, booster-um will will use the kernel parameters from the `/etc/kernel/$pkgbase.cmdline` file. `$pkgbase` is the name of the pacman package name for the kernel (linux, linux-lts, linux-zen etc.). If this file doesn't exist, booster-um will create it. The default `/etc/kernel/cmdline` will be used as a shared cmdline for all kernels
+
+* `remove_leftovers` manages the removal of leftovers when generating the UKI files. Besides the vmlinuz and booster files, EFI entries, fallback images and kernel cmdlines are treated as leftovers, they will be removed if `efistub`, `cmdline_per_kernel`, `generate_fallback` options are disabled. If enabled, leftovers will always be removed after generating UKI files. Leftovers will always be removed if you manually delete the UKI for the specified kernel (`booster-um -r`)
+
+* `cmdline_per_kernel` manages the creation of the cmdline per kernel. If enabled, booster-um will will use the kernel parameters from the `/etc/kernel/$pkgbase.cmdline` file. `$pkgbase` is the name of the pacman kernel package name (linux, linux-lts, linux-zen etc.). If this file doesn't exist, booster-um will create it. The default `/etc/kernel/cmdline` will be used as a shared cmdline for all kernels
+
 * `generate_fallback` manages the creation of fallback (universal) UKI files. Separate fallback images will not be created if `universal` flag is enabled in `/etc/booster.yaml` config
-* `efistub` manages EFI entries. If enabled, booster-um will create a new EFI entry. Also, the booster-um will by default preserve old boot order and add the newly created EFI entry at the **end** of the boot order
+
 * `splash` a picture to display during boot picture. The argument is a path to a BMP file. Default `/usr/share/systemd/bootctl/splash-arch.bmp` picture will be used if this path is invalid or not specified
+
+* `efistub` manages EFI entries. If enabled, booster-um will create a new EFI entry. Also, the booster-um will by default preserve old boot order and add the newly created EFI entry at the **end** of the boot order
 * `efistub_config` node provides additional efistub configuration. It is currently possible to control addition of newly created efi entries to the current boot order:
   * `preserve_boot_order` preserves the old boot order. If enabled, newly created EFI entries will be added to the end of the boot order, otherwise they will be added to the beginning
+
 * `sbsign` manages UKI signing using the `sbsign` tool. If enabled, `sbsign` will be used instead of `sbctl`. After enabling this type of signing, the options in the `sbsign_config` node can be set arbitrarily
 * `sbsign_config` node provides `sbsign` configuration:
   * `pcr_banks` a comma separated list of PCR banks to sign a policy for

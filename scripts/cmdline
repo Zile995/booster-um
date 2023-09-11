@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+set -e
+
+# Returns the cmdline string or cmdline file path
+_get_cmdline() {
+  local pkgbase default_cmdline cmdline
+  pkgbase="$1"
+  default_cmdline=/etc/kernel/cmdline
+
+  # Create the default cmdline if it doesn't exist
+  [[ ! -e $default_cmdline ]] && touch "$default_cmdline"
+
+  # If cmdline per kernel is enabled, create the cmdline string
+  if _cmdline_per_kernel; then
+    # Create the pkgbase cmdline
+    local pkgbase_cmdline="/etc/kernel/${pkgbase}.cmdline"
+    [[ ! -e $pkgbase_cmdline ]] && touch "$pkgbase_cmdline"
+
+    local default_parameters pkgbase_parameters
+    read -r default_parameters < "$default_cmdline"
+    read -r pkgbase_parameters < "$pkgbase_cmdline"
+
+    # Concatenate the default and pkgbase cmdline strings
+    cmdline="${default_parameters:+$default_parameters }${pkgbase_parameters}"
+    cmdline="${cmdline%% }"
+  else
+    # Otherwise, pass the default cmdline @path
+    cmdline="@${default_cmdline}"
+  fi
+  echo "$cmdline"
+}

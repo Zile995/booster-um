@@ -116,6 +116,9 @@ _remove_uki() {
     # Remove the UKI file
     rm -f "$uki"
 
+    # Remove the cmdline file
+    rm -f "/etc/kernel/${pkgbase}.cmdline"
+
     # Remove the EFI entry
     _remove_efi_entry "$uki"
   done

@@ -44,8 +44,8 @@ main() {
       ;;
     -G)
       # Always regenerate initramfs
-      # Generate UKI files for all installed kernels
-      _generate_all_files
+      # Regenerate UKI files for all installed kernels
+      _regenerate_all
       ;;
     -R)
       # Remove known booster*, vmlinuz*, UKI files and other leftovers for all installed kernels
@@ -64,9 +64,9 @@ main() {
     -U)
       # It will always regenerate initramfs
       # This argument is used in libalpm hook
-      # Generate UKI files for all installed kernels
+      # Regenerate UKI files for all installed kernels
       always_sign=0
-      _generate_all_files
+      _regenerate_all
       ;;
     *)
       echo -e "${R}==>${NC} Unknown parameter ${R}$arg${NC} passed." >&2

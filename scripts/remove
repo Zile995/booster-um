@@ -75,7 +75,7 @@ _remove_all_uki() {
   done
 }
 
-# Removes esp/EFI/Linux dir all its files from the sbctl database
+# Removes esp/EFI/Linux dir and all files from the sbctl database
 _remove_efi_dir() {
   shopt -s nullglob
 

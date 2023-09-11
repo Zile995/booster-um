@@ -2,32 +2,6 @@
 
 set -e
 
-# Removes all known booster initramfs, vmlinuz and UKI files
-# With -F argument it removes all initramfs-*, booster-*, vmlinuz-* files and esp/EFI/Linux dir
-_remove_all_files() {
-  local arg="$1"
-
-  case "$arg" in
-    -F)
-      echo -e "${Y}::${NC} Removing ${Y}all initramfs*, booster*, vmlinuz*${NC} files from ${Y}/boot${NC}..."
-
-      # Remove all initramfs-*, booster-*, vmlinuz-* files
-      rm -f /boot/{.initrd,initramfs,booster,vmlinuz}*
-
-      # Remove esp/EFI/Linux dir all its files from the sbctl database
-      _remove_efi_dir
-      ;;
-    "")
-      # Remove all known UKI files from esp/EFI/Linux dir
-      _remove_all_uki
-      ;;
-    *)
-      echo -e "${R}==>${NC} Unknown parameter ${R}$arg${NC} passed." >&2 && exit
-      ;;
-  esac
-  echo -e "${G}==>${NC} Done."
-}
-
 # Removes all known vmlinuz and initramfs files for specified kernel
 _remove_leftovers() {
   local pkgbase="$1"
@@ -76,8 +50,13 @@ _remove_all_uki() {
 }
 
 # Removes esp/EFI/Linux dir and all files from the sbctl database
-_remove_efi_dir() {
+_cleanup() {
   shopt -s nullglob
+
+  echo -e "${Y}::${NC} Removing ${Y}all initramfs*, booster*, vmlinuz*${NC} files from ${Y}/boot${NC}..."
+
+  # Remove all initramfs-*, booster-*, vmlinuz-* files
+  rm -f /boot/{.initrd,initramfs,booster,vmlinuz}*
 
   # Store all EFI files in array
   local efi_files=("${EFI_DIR}"/*.efi)
@@ -93,6 +72,10 @@ _remove_efi_dir() {
   # Remove esp/EFI/Linux dir
   echo -e "${Y}==>${NC} Removing ${Y}${EFI_DIR}${NC} dir..."
   rm -rf "$EFI_DIR"
+
+  # Remove *.cmdline files
+  echo -e "${Y}==>${NC} Removing all ${Y}.cmdline${NC} files from ${Y}/etc/kernel${NC}..."
+  rm -f "/etc/kernel/*.cmdline"
 
   shopt -u nullglob
 }

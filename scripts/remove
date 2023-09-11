@@ -53,10 +53,16 @@ _remove_leftovers() {
     rm -f "$fallback_uki"
   fi
 
+  # Remove efi entry if efistub is not enabled
   if ! _should_create_efi_entry; then
     _remove_efi_entry "$uki"
     [[ $fallback_removed -eq 1 ]] && return
     _remove_efi_entry "$fallback_uki"
+  fi
+
+  # Remove the pkgbase cmdline if cmdline per kernel is not enabled
+  if ! _cmdline_per_kernel; then
+    rm -f "/etc/kernel/${pkgbase}.cmdline"
   fi
 }
 
@@ -69,7 +75,7 @@ _remove_all_uki() {
   done
 }
 
-# Removes esp/EFI/Linux dir all its files from the sbctl database
+# Removes esp/EFI/Linux dir and all files from the sbctl database
 _remove_efi_dir() {
   shopt -s nullglob
 
@@ -109,6 +115,9 @@ _remove_uki() {
 
     # Remove the UKI file
     rm -f "$uki"
+
+    # Remove the cmdline file
+    rm -f "/etc/kernel/${pkgbase}.cmdline"
 
     # Remove the EFI entry
     _remove_efi_entry "$uki"

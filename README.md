@@ -10,6 +10,7 @@ The script can only be used on Arch Linux.
    * util-linux - Miscellaneous system utilities for Linux
  * Optional:
    * sbctl - Sign UKI files
+   * sbsigntools - Sign UKI files with sbsign
    * efibootmgr - Create EFI entries
 
 ## Installation
@@ -34,7 +35,7 @@ Clone the repo or download the [PKGBUILD](https://github.com/Zile995/booster-um/
   * Remove UKI files from ESP and sbctl database on kernel removal
   * Regenerate UKIs for all installed kernels when booster, microcode, dkms or firmware files are installed, updated, or removed
   * Will not sign generated UKI files on microcode, extramodules (nvidia, nvidia-lts etc.) and kernel updates, sbctl hook will do that
-  * Will sign newly created UKI files if they do not exists in the sbctl database. Also, you don't need to manually add UKI files in the sbctl database.
+  * Will sign newly created UKI files if they do not exists in the sbctl database. Also, you don't need to manually add UKI files in the sbctl database
 
 * Default `booster-um -G` output and `/boot`|`/esp/EFI/LINUX` content:
   * <details>
@@ -58,29 +59,47 @@ booster-um config file is located at `/etc/booster-um.yaml`. By default it is em
  remove_leftovers: true
  generate_fallback: false
 
- # EFISTUB 
  efistub: false
  efistub_config:
    preserve_boot_order: true
+
+ sbsign: false
+ sbsign_config:
+   pcr_banks: sha1,sha256,sha384,sha512
+   pcr_private_key: /path/to/pcr-private-system-key.pem
+   pcr_public_key: /path/to/pcr-public-system-key.pem
+   secureboot_private_key: /path/to/DB.key
+   secureboot_certificate: /path/to/DB.crt
  ```
 
-* `sign_uki` manages the UKI signing
+* `sign_uki` manages the UKI signing. If enabled, `sbctl`, or `sbsign` if enabled, will sign generated UKI files
 * `remove_leftovers` manages the removal of leftovers. Besides the vmlinuz and booster files, EFI entries and fallback images are treated as leftovers, they will be removed if `efistub` or `generate_fallback` options are disabled. To trigger new leftovers removal configuration, simply run the `booster-um -G`
 * `generate_fallback` manages the creation of fallback (universal) UKI files. Separate fallback images will not be created if `universal` flag is enabled in `/etc/booster.yaml` config
-* `efistub` manages EFI entries. If enabled, booster-um will create a new EFI entry. Also, the booster-um will by default preserve old boot order and add the newly created EFI entry at the **end** of the boot order.
-* `efistub_config` node provides additional efistub configuration. It is currently possible to control addition of newly created efi entries to the current boot order
-* `preserve_boot_order` as mentioned, preserves old boot order. If enabled, newly created EFI entries will be added to the end of the boot order, otherwise they will be added to the beginning
-
+* `efistub` manages EFI entries. If enabled, booster-um will create a new EFI entry. Also, the booster-um will by default preserve old boot order and add the newly created EFI entry at the **end** of the boot order
+* `efistub_config` node provides additional efistub configuration. It is currently possible to control addition of newly created efi entries to the current boot order:
+  * `preserve_boot_order` preserves the old boot order. If enabled, newly created EFI entries will be added to the end of the boot order, otherwise they will be added to the beginning
+* `sbsign` manages UKI signing using the `sbsign` tool. If enabled, `sbsign` will be used instead of `sbctl`. After enabling this type of signing, the options in the `sbsign_config` node can be set arbitrarily
+* `sbsign_config` node provides `sbsign` configuration:
+  * `pcr_banks` a comma separated list of PCR banks to sign a policy for
+  * `pcr_private_key` a path to a private key to use for signing PCR policies
+  * `pcr_public_key` a path to public key to use for signing PCR policies
+  * `secureboot_private_key` a path to a private key to use for signing of the UKI file
+  * `secureboot_certificate` a path to a certificate to use for signing of UKI file
+ 
 ## First run
 * booster-um will copy the current cmdline (`/proc/cmdline`) on the first run, if you don't like this, create and edit the `/etc/kernel/cmdline` file. Take care to remove entries pointing to **microcode, vmlinuz and initramfs**. Here is a simple cmdline example (Change the `root=` parameter to reflect your Linux root partitions):
   ```Shell
   root=UUID=0a3407de-014b-458b-b5c1-848e92a327a3 rw quiet splash
   ```
-* Edit the `/etc/booster-um.yaml` config if needed. Empty config file will use the default configuration. If you use EFISTUB booting, add `efistub: true` to config.
-* You can then delete the initramfs files of other generators, as well as the entire `esp/EFI/Linux` directory, simply by running `booster-um -R -F`
+* Edit the `/etc/booster-um.yaml` config if needed. Empty config file will use the default configuration:
+  * If you use the EFISTUB booting, add the `efistub: true` to the config
+  * If you don't have secureboot keys and `sbctl` is installed, generate them with `sbctl` before generating the UKI files. `booster-um` will by default sign the UKI files with `sbctl` tool if it is installed. If you don't like that, set the `sign_uki: false` to the config. 
+  * If you want to use the manually generated keys, use the `sbsign` tools instead of the `sbctl`. Install the `sbsigntools` and set the `sbsign: true` to the config. The `sign_uki` must not be disabled and you will need to provide the appropriate key paths within the `sbsign_config` node (usually `secureboot_private_key` and `secureboot_certificate` fields	need to be configured)
+  * For for more information on creating secureboot keys, see the [UEFI/Secure Boot](https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secure_Boot) article
+* Optionally you can delete the initramfs files of other generators, as well as the entire `esp/EFI/Linux` directory, simply by running `booster-um -R -F`
 * Regenerate all images with `booster-um -G`
-* If you have enabled the creation of EFI entries and have multiple kernels installed, you may need to change the boot order. You can change it like this, for example (put your boot numbers here): `efibootmgr -o 3,1,0`
-* `systemd-boot` will, if installed, detect UKI files generated by booster-um. For more informations about booting, see the [Unified kernel image - Booting](https://wiki.archlinux.org/title/Unified_kernel_image#Booting) article
+* If you have enabled the creation of EFI entries, you may need to change the boot order after generating the UKI files. You can change it like this (put your boot numbers here): `efibootmgr -o 3,1,0`
+* `systemd-boot` will, if installed, detect UKI files generated by booster-um. For more information about booting, see the [Unified kernel image - Booting](https://wiki.archlinux.org/title/Unified_kernel_image#Booting) article
 
 ## Usage (help output)
 ```Shell

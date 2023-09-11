@@ -3,8 +3,8 @@
 set -e
 
 # Common paths
-CMDLINE=/etc/kernel/cmdline
-SPLASH=/usr/share/systemd/bootctl/splash-arch.bmp
+declare -g CMDLINE=/etc/kernel/cmdline
+declare -g SPLASH=/usr/share/systemd/bootctl/splash-arch.bmp
 
 # Generates one UKI
 _generate_uki() {
@@ -45,6 +45,21 @@ _generate_uki() {
   [[ ! -e $EFI_DIR ]] && mkdir -p "$EFI_DIR"
   local uki_path="${EFI_DIR}/arch-${pkgbase}"
 
+  local -a sign_args=()
+  if [[ $sbsign -eq 1 ]] && _should_sign_uki; then
+    local pcr_banks="$(_get_sbsign_property pcr_banks)"
+    local pcr_private_key="$(_get_sbsign_property pcr_private_key)"
+    local pcr_public_key="$(_get_sbsign_property pcr_public_key)"
+    local secureboot_private_key="$(_get_sbsign_property secureboot_private_key)"
+    local secureboot_certificate="$(_get_sbsign_property secureboot_certificate)"
+
+    sign_args+=(${pcr_banks:+"--pcr-banks=$pcr_banks"} \
+                ${pcr_private_key:+"--pcr-private-key=$pcr_private_key"} \
+                ${pcr_public_key:+"--pcr-public-key=$pcr_public_key"} \
+                ${secureboot_private_key:+"--secureboot-private-key=$secureboot_private_key"} \
+                ${secureboot_certificate:+"--secureboot-certificate=$secureboot_certificate"})
+  fi
+
   for init_id in "${!booster_inits[@]}"; do
     local booster_initramfs="${booster_inits[init_id]}"
 
@@ -59,12 +74,12 @@ _generate_uki() {
 
     # Build the UKI file, sign it and create EFI entry
     /usr/lib/systemd/ukify build \
-      --uname="${UNAME}" \
-      --linux="${VMLINUZ}" \
-      --initrd="${INITRD}" \
-      --cmdline=@"${CMDLINE}" \
-      --splash="${SPLASH}" \
-      --output="${UKI}" | tail -n 1 && \
+      --uname="$UNAME" \
+      --linux="$VMLINUZ" \
+      --initrd="$INITRD" \
+      --cmdline=@"$CMDLINE" \
+      --splash="$SPLASH" "${sign_args[@]}" \
+      --output="$UKI" | tail -n 1 && \
       _sign_uki "$UKI" && _create_efi_entry "$UKI"
 
     # Remove the old initrd after creating the UKI file

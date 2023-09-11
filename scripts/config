@@ -2,11 +2,15 @@
 
 set -e
 
-config_valid=0
+# Disable sbsign by default
+declare -g sbsign=0
+
+# A value of 0 means that the booster-um config is valid
+declare -g config_valid=0
 
 # Configs
-CONFIG=/etc/booster-um.yaml
-BOOSTER_CONFIG=/etc/booster.yaml
+declare -g CONFIG=/etc/booster-um.yaml
+declare -g BOOSTER_CONFIG=/etc/booster.yaml
 
 # Checks if booster-um.yaml config is valid
 _check_config() {
@@ -15,6 +19,12 @@ _check_config() {
   if [[ $config_valid -ne 0 ]]; then
     echo -e "${R}==>${NC} ${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."
   fi
+  _set_signing_tool
+}
+
+_set_signing_tool() {
+  [[ $config_valid -eq 1 ]] && return
+  if _command_exists sbsign && yq '.sbsign == true' "$CONFIG" | grep -Fqwx -- 'true'; then sbsign=1; fi
 }
 
 # Checks if the creation of universal images is enabled
@@ -27,6 +37,20 @@ _is_universal() {
 _should_generate_fallback() {
   [[ $config_valid -eq 1 ]] && return 1
   if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' && ! _is_universal; then return; fi
+  false
+}
+
+# Checks if the booster-um should always sign generated UKI
+_should_sign_uki() {
+  [[ $config_valid -eq 1 ]] && return
+  if ! yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
+  false
+}
+
+# Checks if the booster-um should remove leftovers (vmlinuz and initramfs)
+_should_remove_leftovers() {
+  [[ $config_valid -eq 1 ]] && return
+  if ! yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
@@ -44,16 +68,10 @@ _should_preserve_boot_order() {
   false
 }
 
-# Checks if the booster-um should always sign generated UKI
-_should_sign_uki() {
-  [[ $config_valid -eq 1 ]] && return
-  if ! yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
-  false
-}
-
-# Checks if the booster-um should remove leftovers (vmlinuz and initramfs)
-_should_remove_leftovers() {
-  [[ $config_valid -eq 1 ]] && return
-  if ! yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
-  false
+# Returns the sbsign property value
+_get_sbsign_property() {
+  local property="$1"
+  local value="$(yq ".sbsign_config.$property" "$CONFIG")"
+  [[ $value == null ]] && return
+  echo "$value"
 }

@@ -68,6 +68,12 @@ _should_preserve_boot_order() {
   false
 }
 
+_cmdline_per_kernel() {
+  [[ $config_valid -eq 1 ]] && return 1
+  if yq '.cmdline_per_kernel == true' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
+  false
+}
+
 # Returns the sbsign property value
 _get_sbsign_property() {
   local property="$1"

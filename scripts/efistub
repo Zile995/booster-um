@@ -96,6 +96,9 @@ _preserve_boot_order() {
   # Get the boot order list
   readarray -d ',' boot_order < <(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
 
+  # Do not change the boot order if there is only one entry or no entrties
+  if [[ ${#boot_order[@]} -le 1 ]]; then return; fi
+
   # Restore the old boot order without the newly added entry
   old_boot_order="$(printf "%s" "${boot_order[@]:1}")"
 

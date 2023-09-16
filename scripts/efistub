@@ -114,40 +114,41 @@ _create_efi_entry() {
   local uki loader_path pkgbase
   uki="$1"
 
-  # Extract pkgbase from UKI file path
-  pkgbase="$(_get_pkgbase_from_path "$uki")"
-
   # Set loader path with backslashes
   loader_path="$(_get_formatted_efi_path "$uki")"
 
-  if ! _efi_entry_exists "$loader_path"; then
-    local disk esp esp_number label
-    # Get Efi System Partition. Example: /dev/nvme0n1p1
-    esp="$(findmnt --real -nreo source "${ESP_MOUNT}")"
+  # Return if the entry exists
+  if _efi_entry_exists "$loader_path"; then return; fi
 
-    # Get the found boot partition disk. Example: /dev/nvme0n1
-    disk="/dev/$(lsblk -r -n -o PKNAME "${esp}")"
+  # Extract pkgbase from UKI file path
+  pkgbase="$(_get_pkgbase_from_path "$uki")"
 
-    # Get Efi System Partition number. Example: For /dev/nvme0n1p1, the number is 1
-    esp_number="$(lsblk -r -n -o KNAME "${esp}")"
-    esp_number="$(</sys/class/block/"${esp_number}"/partition)"
+  local disk esp esp_number label
+  # Get Efi System Partition. Example: /dev/nvme0n1p1
+  esp="$(findmnt --real -nreo source "${ESP_MOUNT}")"
 
-    # Set OS label to NAME + (pkgbase): Example: Arch Linux (linux)
-    label="$(_get_label "$pkgbase")"
+  # Get the found boot partition disk. Example: /dev/nvme0n1
+  disk="/dev/$(lsblk -r -n -o PKNAME "${esp}")"
 
-    echo -e "${B} ->${NC} Creating EFI entry ${G}${label}${NC}..."
+  # Get Efi System Partition number. Example: For /dev/nvme0n1p1, the number is 1
+  esp_number="$(lsblk -r -n -o KNAME "${esp}")"
+  esp_number="$(</sys/class/block/"${esp_number}"/partition)"
 
-    # Add the EFI entry
-    efibootmgr --create \
-      --label "${label}" \
-      --disk "${disk}" \
-      --part "${esp_number}" \
-      --loader "${loader_path^^}" \
-      --unicode -q
+  # Set OS label to NAME + (pkgbase): Example: Arch Linux (linux)
+  label="$(_get_label "$pkgbase")"
 
-    # Preserve old boot order
-    _preserve_boot_order
-  fi
+  echo -e "${B} ->${NC} Creating EFI entry ${G}${label}${NC}..."
+
+  # Add the EFI entry
+  efibootmgr --create \
+    --label "${label}" \
+    --disk "${disk}" \
+    --part "${esp_number}" \
+    --loader "${loader_path^^}" \
+    --unicode -q
+
+  # Preserve old boot order
+  _preserve_boot_order
 }
 
 # Removes the EFI entry

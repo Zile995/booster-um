@@ -20,7 +20,8 @@ Clone the repo or download the [PKGBUILD](https://github.com/Zile995/booster-um/
 * booster-um by default:
   * Signs generated UKI files with `sbctl` **if installed**
   * Uses default splash `/usr/share/systemd/bootctl/splash-arch.bmp`
-  * Creates the empty `/etc/kernel/cmdline` if it does not exist
+  * Creates the empty `/etc/kernel/cmdline` if it does not exist.
+  * Uses the `/proc/cmdline` if the `/etc/kernel/cmdline` or per kernel cmdline files are empty or has only white spaces.
   * Detects the `XBOOTLDR` partition **if it exists and is mounted on** `/boot`
   * Uses default configuration if the `/etc/booster-um.yaml` config **is not valid**
   * Generates UKI in `esp/EFI/Linux` dir. If this directory does not exist, it will be created
@@ -78,7 +79,7 @@ booster-um config file is located at `/etc/booster-um.yaml`. By default it is em
 
 * `remove_leftovers` manages the removal of leftovers when generating the UKI files. Besides the vmlinuz and booster files, EFI entries, fallback images and kernel cmdlines are treated as leftovers, they will be removed if `efistub`, `cmdline_per_kernel`, `generate_fallback` options are disabled. If enabled, leftovers will always be removed after generating UKI files. Leftovers will always be removed if you manually delete the UKI for the specified kernel (`booster-um -r`)
 
-* `cmdline_per_kernel` manages the creation of the cmdline per kernel. If enabled, booster-um will will use the kernel parameters from the `/etc/kernel/$pkgbase.cmdline` file. `$pkgbase` is the name of the pacman kernel package name (linux, linux-lts, linux-zen etc.). If this file doesn't exist, booster-um will create it. The default `/etc/kernel/cmdline` will be used as a shared cmdline for all kernels
+* `cmdline_per_kernel` manages the creation of the cmdline per kernel. If enabled, booster-um will use the kernel parameters from the `/etc/kernel/$pkgbase.cmdline` file. `$pkgbase` is the name of the pacman kernel package name (linux, linux-lts, linux-zen etc.). If this file doesn't exist, booster-um will create it. The default `/etc/kernel/cmdline` will be used as a shared cmdline for all kernels.
 
 * `generate_fallback` manages the creation of fallback (universal) UKI files. Separate fallback images will not be created if `universal` flag is enabled in `/etc/booster.yaml` config
 

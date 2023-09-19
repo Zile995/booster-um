@@ -2,14 +2,27 @@
 
 set -e
 
-# Returns the cmdline string or cmdline file path
+# Returns current kernel cmdline
+_get_current_cmdline() {
+  local current_cmdline=/proc/cmdline
+  echo -e "${Y}==>${NC} Reusing current kernel cmdline from ${Y}$current_cmdline${NC}" >&2
+  echo "$current_cmdline"
+}
+
+# Returns default kernel cmdline
+_get_default_cmdline() {
+  local default_cmdline=/etc/kernel/cmdline
+  # Create the default cmdline if it doesn't exist
+  [[ ! -e $default_cmdline ]] && touch "$default_cmdline"
+  echo "$default_cmdline"
+}
+
+# Returns kernel cmdline string or cmdline file path
 _get_cmdline() {
   local pkgbase default_cmdline cmdline
   pkgbase="$1"
-  default_cmdline=/etc/kernel/cmdline
 
-  # Create the default cmdline if it doesn't exist
-  [[ ! -e $default_cmdline ]] && touch "$default_cmdline"
+  default_cmdline="$(_get_default_cmdline)"
 
   # If cmdline per kernel is enabled, create the cmdline string
   if _cmdline_per_kernel; then
@@ -24,7 +37,11 @@ _get_cmdline() {
     # Concatenate the default and pkgbase cmdline strings
     cmdline="${default_parameters:+$default_parameters }${pkgbase_parameters}"
     cmdline="${cmdline%% }"
+    [[ -z "${cmdline// }" ]] && cmdline="@$(_get_current_cmdline)"
   else
+    # If default cmdline file is empty or has only white spaces, use the current cmdline
+    [[ -z $(grep '[^[:space:]]' $default_cmdline) ]] && default_cmdline="$(_get_current_cmdline)"
+
     # Otherwise, pass the default cmdline @path
     cmdline="@${default_cmdline}"
   fi

@@ -13,20 +13,8 @@ _generate_uki() {
 
   echo -e "${B}==>${NC} Generating UKI for ${G}${pkgbase}${NC}..."
 
-  # cmdline file path or cmdline kernel parameters
-  CMDLINE="$(_get_cmdline $pkgbase)"
-
-  # splash file
-  SPLASH="$(_get_splash_path)"
-
   # vmlinuz path
   VMLINUZ="/boot/vmlinuz-${pkgbase}"
-
-  # initrd path
-  INITRD="/boot/.initrd-${pkgbase}"
-
-  # microcodes
-  mapfile -d '' microcodes < <(find /boot -name '*-ucode.img' -type f -print0)
 
   # booster initramfs
   local booster_inits=("/boot/booster-${pkgbase}.img")
@@ -39,6 +27,18 @@ _generate_uki() {
     echo -e "${R}==>${NC} Unable to generate UKI for ${R}${pkgbase}${NC}..."
     return
   fi
+
+  # cmdline file path or cmdline kernel parameters
+  CMDLINE="$(_get_cmdline $pkgbase)"
+
+  # splash file
+  SPLASH="$(_get_splash_path)"
+
+  # microcodes
+  mapfile -d '' microcodes < <(find /boot -name '*-ucode.img' -type f -print0)
+
+  # initrd temp path
+  INITRD="$(mktemp -t 'initrd.XXXXXX')"
 
   # UKI file path, create EFI dir if it doesn't exist
   [[ ! -e $EFI_DIR ]] && mkdir -p "$EFI_DIR"
@@ -85,7 +85,7 @@ _generate_uki() {
     rm -f "$INITRD"
   done
 
-  # Remove the leftovers (vmlinuz and booster initramfs)
+  # Remove the leftovers (vmlinuz, booster initramfs and other files)
   _remove_leftovers "$pkgbase" 1
 }
 

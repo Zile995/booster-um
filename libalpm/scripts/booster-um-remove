@@ -15,9 +15,6 @@ for kernel in "${kernels[@]}"; do
   fi
   read -r pkgbase < "${kernel}/pkgbase"
 
-  # Remove the old vmlinuz file
-  rm -f /boot/vmlinuz-"${pkgbase}"
-
   # Remove the UKI file
   booster-um -r "$pkgbase"
 done

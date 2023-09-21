@@ -13,20 +13,8 @@ _generate_uki() {
 
   echo -e "${B}==>${NC} Generating UKI for ${G}${pkgbase}${NC}..."
 
-  # cmdline file path or cmdline kernel parameters
-  CMDLINE="$(_get_cmdline $pkgbase)"
-
-  # splash file
-  SPLASH="$(_get_splash_path)"
-
   # vmlinuz path
   VMLINUZ="/boot/vmlinuz-${pkgbase}"
-
-  # initrd path
-  INITRD="/boot/.initrd-${pkgbase}"
-
-  # microcodes
-  mapfile -d '' microcodes < <(find /boot -name '*-ucode.img' -type f -print0)
 
   # booster initramfs
   local booster_inits=("/boot/booster-${pkgbase}.img")
@@ -39,6 +27,22 @@ _generate_uki() {
     echo -e "${R}==>${NC} Unable to generate UKI for ${R}${pkgbase}${NC}..."
     return
   fi
+
+  # Fix the initramfs file permissions if necessary
+  [[ ! $(stat -c %a "${booster_inits[@]}" | grep -w "600" | wc -l) -eq "${#booster_inits[@]}" ]] && \
+  chmod -f 600 -- "${booster_inits[@]}"
+
+  # cmdline file path or cmdline kernel parameters
+  CMDLINE="$(_get_cmdline $pkgbase)"
+
+  # splash file
+  SPLASH="$(_get_splash_path)"
+
+  # microcodes
+  mapfile -d '' microcodes < <(find /boot -name '*-ucode.img' -type f -print0)
+
+  # initrd temp path
+  INITRD="$(mktemp -t 'initrd.XXXXXX')"
 
   # UKI file path, create EFI dir if it doesn't exist
   [[ ! -e $EFI_DIR ]] && mkdir -p "$EFI_DIR"
@@ -85,7 +89,7 @@ _generate_uki() {
     rm -f "$INITRD"
   done
 
-  # Remove the leftovers (vmlinuz and booster initramfs)
+  # Remove the leftovers (vmlinuz, booster initramfs and other files)
   _remove_leftovers "$pkgbase" 1
 }
 
@@ -151,6 +155,9 @@ _generate_initramfs() {
     return 1
   fi
 
+  # Set the permission to 600 for initramfs file
+  chmod -f 600 -- "$initramfs"
+
   # Generate fallback initramfs
   _generate_fallback_initramfs "$pkgbase" "$uname"
 }
@@ -176,12 +183,16 @@ _install_vmlinuz() {
 
 # Generates fallback initramfs
 _generate_fallback_initramfs() {
-  local uname pkgbase
+  if ! _should_generate_fallback; then return; fi
+
+  local uname pkgbase fallback_initramfs
   pkgbase="$1"
   uname="$2"
-  if _should_generate_fallback; then
-    booster build --force --universal --kernel-version "$uname" "/boot/booster-${pkgbase}-fallback.img"
-  fi
+  fallback_initramfs="/boot/booster-${pkgbase}-fallback.img"
+
+  # Generate the fallback initramfs
+  booster build --force --universal --kernel-version "$uname" "$fallback_initramfs" && \
+  chmod -f 600 -- "$fallback_initramfs"
 }
 
 # Regenerates UKI files for all installed kernels

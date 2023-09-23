@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -x
+set -e
 
 # Removes the cmdline for specified kernel
 _remove_cmdline() {
@@ -162,13 +162,16 @@ _post_transaction_remove() {
 
   # Find all known pkgbases from the uki file path name
   for uki in "${uki_files[@]}"; do
-    local pkgbase=$(_get_pkgbase_from_path "$uki")
+    local pkgbase="$(_get_pkgbase_from_path "$uki")"
     pkgbase="${pkgbase%-fallback}"
     found_pkgbases+=("$pkgbase")
   done
 
+  # Only get unique values
+  found_pkgbases=($(echo "${found_pkgbases[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+
   # Find the remove pkgbases
-  removed_pkgbases=("$(echo ${pkgbases[@]} ${found_pkgbases[@]} | tr ' ' '\n' | sort | uniq -u)")
+  removed_pkgbases=($(echo "${pkgbases[@]}" "${found_pkgbases[@]}" | tr ' ' '\n' | sort | uniq -u))
 
   # For each removed pkgbase, remove the UKI file and other leftovers
   for pkgbase in "${removed_pkgbases[@]}"; do

@@ -1,25 +1,50 @@
 #!/usr/bin/env bash
 
-set -e
+set -x
 
-# Removes all known vmlinuz and initramfs files for specified kernel
-_remove_leftovers() {
+# Removes the cmdline for specified kernel
+_remove_cmdline() {
   local pkgbase="$1"
 
-  if ! _should_remove_leftovers; then return; fi
+  # cmdline path
+  local cmdline_path="/etc/kernel/${pkgbase}.cmdline"
 
-  # Remove leftovers in /boot
+  # If the cmdline path exists, remove it
+  if [[ -e $cmdline_path ]]; then
+    echo -e "${Y}==>${NC} Removing cmdline ${Y}$cmdline_path${NC}..." >&2
+    rm -f "cmdline_path"
+  fi
+}
+
+# Removes the leftovers form /boot
+_remove_boot_leftovers() {
+  local pkgbase="$1"
+
+  # Remove leftovers from /boot dir
   rm -f /boot/.booster*
   rm -f /boot/vmlinuz-"${pkgbase}"
   rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
+}
 
-  local force_check="${2:-0}"
-  [[ $force_check -eq 0 ]] && return
+# Removes other leftovers (efi entries, cmdlines, fallback images)
+_remove_other_leftovers() {
+  local pkgbase="$1"
 
   local uki="${EFI_DIR}/arch-${pkgbase}.efi"
   local fallback_uki="${EFI_DIR}/arch-${pkgbase}-fallback.efi"
 
-  # Remove fallback UKI images in ESP if fallback generation is not enabled
+  # If the package doesn't exist, remove UKI and leftovers
+  if ! _pkgbase_exists "$pkgbase"; then
+    _remove_from_db "$uki"
+    _remove_from_db "$fallback_uki"
+    _remove_efi_entry "$uki"
+    _remove_efi_entry "$fallback_uki"
+    _remove_cmdline "$pkgbase"
+    rm -f "$uki" "$fallback_uki"
+    return
+  fi
+
+  # Remove fallback UKI files in ESP if fallback generation is not enabled
   if ! _should_generate_fallback && [[ -e $fallback_uki ]]; then
     _remove_from_db "$fallback_uki"
     _remove_efi_entry "$fallback_uki" && local fallback_removed=1
@@ -35,8 +60,23 @@ _remove_leftovers() {
 
   # Remove the pkgbase cmdline if cmdline per kernel is not enabled
   if ! _cmdline_per_kernel; then
-    rm -f "/etc/kernel/${pkgbase}.cmdline"
+    _remove_cmdline "$pkgbase"
   fi
+}
+
+# Removes all known vmlinuz and initramfs files for specified kernel
+_remove_leftovers() {
+  local pkgbase="$1"
+
+  if ! _should_remove_leftovers; then return; fi
+
+  # Remove leftovers from /boot dir
+  _remove_boot_leftovers "$pkgbase"
+
+  [[ ${2:-0} -eq 0 ]] && return
+
+  # Remove other leftovers (efi entries, cmdlines, fallback images)
+  _remove_other_leftovers "$pkgbase"
 }
 
 # Removes all known UKI files from esp/EFI/Linux dir
@@ -107,4 +147,37 @@ _remove_uki() {
 
   # Remove the leftovers
   _remove_leftovers "$pkgbase"
+}
+
+# Removes UKI files and other leftovers
+# This function is called from PostTransaction libalpm Remove hook
+_post_transaction_remove() {
+  shopt -s nullglob
+
+  local -a found_pkgbases=()
+  #local -a removed_pkgbases=()
+
+  # Get all known UKI files from the EFI dir, e.g.: /efi/EFI/Linux/arch-linux.efi
+  local uki_files=("${EFI_DIR}"/arch-*.efi)
+
+  # Find all known pkgbases from the uki file path name
+  for uki in "${uki_files[@]}"; do
+    local pkgbase=$(_get_pkgbase_from_path "$uki")
+    pkgbase="${pkgbase%-fallback}"
+    found_pkgbases+=("$pkgbase")
+  done
+
+  # Find the remove pkgbases
+  removed_pkgbases=("$(echo ${pkgbases[@]} ${found_pkgbases[@]} | tr ' ' '\n' | sort | uniq -u)")
+
+  # For each removed pkgbase, remove the UKI file and other leftovers
+  for pkgbase in "${removed_pkgbases[@]}"; do
+    # Remove the leftovers from /boot dir
+    _remove_boot_leftovers "$pkgbase"
+
+    # Remove other leftovers (efi entries, cmdlines, fallback images)
+    _remove_other_leftovers "$pkgbase"
+  done
+
+  shopt -u nullglob
 }

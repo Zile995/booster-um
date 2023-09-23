@@ -24,10 +24,17 @@ _get_array_index() {
   echo "$((index-1))"
 }
 
+# Checks if the pkgbase exists
+_pkgbase_exists() {
+  local pkgbase="$1"
+  printf '%s\0' "${pkgbases[@]}" | grep -Fqxz -- "$pkgbase"
+  return $?
+}
+
 # Checks if the package name is actually a kernel package name
 _check_pkgbase() {
   local pkgbase="$1"
-  if ! printf '%s\0' "${pkgbases[@]}" | grep -Fqxz -- "$pkgbase"; then
+  if ! _pkgbase_exists "$pkgbase"; then
     echo -e "${R}Invalid kernel package name.${NC}" >&2 && exit 1
   fi
 }

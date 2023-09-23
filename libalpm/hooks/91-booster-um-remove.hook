@@ -5,6 +5,6 @@ Target = usr/lib/modules/*/vmlinuz
 
 [Action]
 Description = Removing UKI files...
-When = PreTransaction
-Exec = /usr/share/libalpm/scripts/booster-um-remove
+When = PostTransaction
+Exec = /usr/bin/booster-um -p
 NeedsTargets

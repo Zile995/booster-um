@@ -39,6 +39,7 @@ _generate_uki() {
   SPLASH="$(_get_splash_path)"
 
   # microcodes
+  local -a microcodes
   mapfile -d '' microcodes < <(find /boot -name '*-ucode.img' -type f -print0)
 
   # initrd temp path

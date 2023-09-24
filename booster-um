@@ -37,6 +37,11 @@ main() {
       shift
       _remove_uki "$1"
       ;;
+    -p)
+      # This argument is used in libalpm remove hook
+      # Remove UKI files and other leftovers for removed kernels
+      _post_transaction_remove
+      ;;
     -C)
       # Cleanup
       # Remove initramfs*, booster*, vmlinuz* files, entire esp/EFI/Linux dir and other leftovers

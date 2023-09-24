@@ -16,9 +16,11 @@ _remove_cmdline() {
   fi
 }
 
-# Removes the leftovers form /boot
+# Removes the leftovers from /boot
 _remove_boot_leftovers() {
   local pkgbase="$1"
+
+  echo -e "${Y}==>${NC} Removing ${G}${pkgbase}${NC} leftovers from ${Y}/boot${NC}..."
 
   # Remove leftovers from /boot dir
   rm -f /boot/.booster*
@@ -133,6 +135,9 @@ _remove_uki() {
   local pkgbase="$1"
   _check_pkgbase "$pkgbase"
 
+  # Remove the leftovers
+  _remove_leftovers "$pkgbase"
+
   # Store all UKI files in array
   readarray -t uki_files < <(find "${EFI_DIR}" \
     -type f \
@@ -153,9 +158,6 @@ _remove_uki() {
     # Remove the EFI entry
     _remove_efi_entry "$uki"
   done
-
-  # Remove the leftovers
-  _remove_leftovers "$pkgbase"
 }
 
 # Removes UKI files and other leftovers

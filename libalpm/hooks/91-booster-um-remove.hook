@@ -4,7 +4,7 @@ Operation = Remove
 Target = usr/lib/modules/*/vmlinuz
 
 [Action]
-Description = Removing UKI files...
+Description = Removing UKI leftovers...
 When = PostTransaction
 Exec = /usr/bin/booster-um -p
 NeedsTargets

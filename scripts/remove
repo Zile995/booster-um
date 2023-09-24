@@ -35,12 +35,22 @@ _remove_other_leftovers() {
 
   # If the package doesn't exist, remove UKI and leftovers
   if ! _pkgbase_exists "$pkgbase"; then
+    echo -e "${Y}==>${NC} Removing ${Y}${uki}${NC} file..."
     _remove_from_db "$uki"
-    _remove_from_db "$fallback_uki"
+
+    # Remove efi entry
     _remove_efi_entry "$uki"
-    _remove_efi_entry "$fallback_uki"
-    _remove_cmdline "$pkgbase"
+
+    # Remove the fallback UKI from the sbctl db and remove the fallback EFI entry
+    if [[ -e $fallback_uki ]]; then
+      echo -e "${Y}==>${NC} Removing ${Y}${fallback_uki}${NC} file..."
+      _remove_from_db "$fallback_uki"
+      _remove_efi_entry "$fallback_uki"
+    fi
+
+    # Remove UKI files from EFI dir
     rm -f "$uki" "$fallback_uki"
+
     return
   fi
 
@@ -54,8 +64,7 @@ _remove_other_leftovers() {
   # Remove efi entry if efistub is not enabled
   if ! _should_create_efi_entry; then
     _remove_efi_entry "$uki"
-    [[ $fallback_removed -eq 1 ]] && return
-    _remove_efi_entry "$fallback_uki"
+    [[ -z $fallback_removed ]] && _remove_efi_entry "$fallback_uki"
   fi
 
   # Remove the pkgbase cmdline if cmdline per kernel is not enabled

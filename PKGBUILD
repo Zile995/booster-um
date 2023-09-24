@@ -34,17 +34,19 @@ package() {
   install -Dm0755 booster-um -t "${pkgdir}/usr/bin"
 
   # Install the helper scripts
-  for file in scripts/*; do
-    install -Dm0755 "$file" -t "${pkgdir}/usr/share/booster-um"
+  for script in scripts/*; do
+    install -Dm0755 "$script" -t "${pkgdir}/usr/share/booster-um"
   done
 
   # Install the libaplm scripts
-  install -Dm0755 libalpm/scripts/booster-um-remove  -t "${pkgdir}/usr/share/libalpm/scripts"
-  install -Dm0755 libalpm/scripts/booster-um-install -t "${pkgdir}/usr/share/libalpm/scripts"
+  for libalpm_script in libalpm/scripts/*; do
+    install -Dm0755 "$libalpm_script" -t "${pkgdir}/usr/share/libalpm/scripts"
+  done
 
   # Install the libalpm hooks
-  install -Dm0644 libalpm/hooks/60-booster-um-remove.hook  -t "${pkgdir}/usr/share/libalpm/hooks"
-  install -Dm0644 libalpm/hooks/90-booster-um-install.hook -t "${pkgdir}/usr/share/libalpm/hooks"
+  for libalpm_hook in libalpm/hooks/*; do
+    install -Dm0644 "$libalpm_hook" -t "${pkgdir}/usr/share/libalpm/hooks"
+  done
 
   # Install the LICENSE
   install -Dm0644 LICENSE -t "${pkgdir}/usr/share/licenses/${pkgname}"

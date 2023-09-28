@@ -21,7 +21,7 @@ Clone the repo or download the [PKGBUILD](https://github.com/Zile995/booster-um/
   * Signs generated UKI files with `sbctl` **if installed**
   * Uses default splash `/usr/share/systemd/bootctl/splash-arch.bmp`
   * Creates the empty `/etc/kernel/cmdline` if it does not exist.
-  * Uses the `/proc/cmdline` if the `/etc/kernel/cmdline` or per kernel cmdline files are empty or has only white spaces.
+  * Uses the `/proc/cmdline` if the cmdline files (`/etc/kernel/cmdline` or per kernel cmdline files) are empty or have only white spaces.
   * Detects the `XBOOTLDR` partition **if it exists and is mounted on** `/boot`
   * Uses default configuration if the `/etc/booster-um.yaml` config **is not valid**
   * Generates UKI in `esp/EFI/Linux` dir. If this directory does not exist, it will be created
@@ -42,19 +42,19 @@ Clone the repo or download the [PKGBUILD](https://github.com/Zile995/booster-um/
   * <details>
     <summary>Generation of UKI files</summary>
 
-    ![generation](https://github.com/Zile995/booster-um/assets/32335484/f072acb4-8fb3-440c-8264-9cd21b7b8333)
-
+    ![generation](https://github.com/Zile995/booster-um/assets/32335484/b65c8776-1ca3-4424-b81f-6a2a9f97d62c)
 
     </details>
   * <details>
     <summary>/boot and /esp/EFI/LINUX content</summary>
 
-    ![content](https://github.com/Zile995/booster-um/assets/32335484/fe0a2741-6f13-45a1-b987-93c38fedba29)
+    ![content](https://github.com/Zile995/booster-um/assets/32335484/465884cb-210b-4d75-8892-ea8325eb7061)
 
     </details>
 
+
 ## Config file
-booster-um config file is located at `/etc/booster-um.yaml`. By default it is empty, here is a default configuration:
+booster-um config file is located at `/etc/booster-um.yaml`. It is empty by default, here is the default configuration:
  ```YAML
  sign_uki: true
  remove_leftovers: true
@@ -102,7 +102,7 @@ booster-um config file is located at `/etc/booster-um.yaml`. By default it is em
   ```Shell
   root=UUID=0a3407de-014b-458b-b5c1-848e92a327a3 rw quiet splash
   ```
-* Edit the `/etc/booster-um.yaml` config if needed. Empty config file will use the default configuration:
+* Edit the `/etc/booster-um.yaml` config if needed (the default configuration will be used if the config file is empty):
   * If you use the EFISTUB booting, add the `efistub: true` to the config
   * If you don't have secureboot keys and `sbctl` is installed, generate them with `sbctl` before generating the UKI files. `booster-um` will by default sign the UKI files with `sbctl` tool if it is installed. If you don't like that, set the `sign_uki: false` to the config. 
   * If you want to use the manually generated keys, use the `sbsign` tools instead of the `sbctl`. Install the `sbsigntools` and set the `sbsign: true` to the config. The `sign_uki` must not be disabled and you will need to provide the appropriate key paths within the `sbsign_config` node (usually `secureboot_private_key` and `secureboot_certificate` fields	need to be configured)

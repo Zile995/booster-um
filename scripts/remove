@@ -166,7 +166,7 @@ _post_transaction_remove() {
   shopt -s nullglob
 
   local -a found_pkgbases=()
-  #local -a removed_pkgbases=()
+  local -a removed_pkgbases=()
 
   # Get all known UKI files from the EFI dir, e.g.: /efi/EFI/Linux/arch-linux.efi
   local uki_files=("${EFI_DIR}"/arch-*.efi)
@@ -183,6 +183,10 @@ _post_transaction_remove() {
 
   # Find the remove pkgbases
   removed_pkgbases=($(echo "${pkgbases[@]}" "${found_pkgbases[@]}" | tr ' ' '\n' | sort | uniq -u))
+
+  if (( ! ${#removed_pkgbases[@]} )); then return 1; fi
+
+  echo -e "${B}::${NC} Removing the UKI leftovers of removed kernels..."
 
   # For each removed pkgbase, remove the UKI file and other leftovers
   for pkgbase in "${removed_pkgbases[@]}"; do

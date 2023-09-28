@@ -40,7 +40,7 @@ main() {
     -p)
       # This argument is used in libalpm remove hook
       # Remove UKI files and other leftovers for removed kernels
-      _post_transaction_remove
+      _post_transaction_remove || exit 0
       ;;
     -C)
       # Cleanup

@@ -82,22 +82,32 @@ _get_sbsign_property() {
   echo "$value"
 }
 
+# Checks if the splash file is a BMP file
+_is_bmp() {
+  local splash="$1"
+  # If the the splash exists and is a BMP file, return
+  if [[ -e $splash && $(file -b --mime-type "$splash") == 'image/bmp' ]]; then return; fi
+  false
+}
+
+# Returns the splash file path
 _get_splash_path() {
   # Set the default arch linux splash
   local default_splash=/usr/share/systemd/bootctl/splash-arch.bmp
-  # If the default arch splash doesn't exist, return and do not use splash
-  [[ ! -e $default_splash ]] && return
-  # If config file doesn't exist, use the default arch linux splash
-  [[ $config_valid -eq 1 ]] && echo "$default_splash" && return
+
+  # If the config file doesn't exist or is not valid, use the default arch linux splash
+  if [[ $config_valid -eq 1 ]] && _is_bmp "$default_splash"; then
+    echo "$default_splash" && return
+  fi
 
   # Otherwise use the splash path from the config file
   local splash="$(yq '.splash' "$CONFIG")"
+
   # If splash path is not specified or does not exist, use the default arch linux splash
   if [[ $splash == null ]] || [[ ! -e $splash ]]; then
     splash="$default_splash"
   fi
+
   # Finally, return the splash path if the splash is a BMP file
-  if [[ $(file -b --mime-type "$splash") == 'image/bmp' ]]; then
-    echo "$splash"
-  fi
+  if _is_bmp "$splash"; then echo "$splash"; fi
 }

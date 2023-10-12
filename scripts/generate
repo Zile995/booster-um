@@ -100,13 +100,12 @@ _generate_kernel_uki() {
   _check_pkgbase "$pkgbase"
 
   # Get the index of pkgbase
-  index="$(_get_array_index pkgbases "$pkgbase")"
+  index="$(_get_array_index pkgbases $pkgbase)"
   local kernel="${kernels[$index]}"
-
-  local uname="${kernel##/usr/lib/modules/}"
+  local uname="$(_get_kernel_uname $kernel)"
 
   # Generate initramfs
-  _generate_initramfs "$kernel" || return
+  _generate_initramfs "$pkgbase" "$uname" || return
 
   # Generate and sign UKI file
   _generate_uki "$pkgbase" "$uname"
@@ -117,7 +116,7 @@ _generate_all_uki() {
   local uname
   for kernel in "${kernels[@]}"; do
     read -r pkgbase < "${kernel}/pkgbase"
-    uname="${kernel##/usr/lib/modules/}"
+    uname="$(_get_kernel_uname $kernel)"
 
     # Generate and sign UKI file
     _generate_uki "$pkgbase" "$uname"
@@ -127,8 +126,11 @@ _generate_all_uki() {
 # Generates initramfs and fallback initramfs
 _regenerate_images() {
   local pids=()
+  local pkgbase
   for kernel in "${kernels[@]}"; do
-    _generate_initramfs "$kernel" & pids+=( $! )
+    read -r pkgbase < "${kernel}/pkgbase"
+    uname="$(_get_kernel_uname $kernel)"
+    _generate_initramfs "$pkgbase" "$uname" & pids+=( $! )
   done
 
   # Wait for all background jobs
@@ -139,15 +141,16 @@ _regenerate_images() {
 
 # Generate initramfs for specified kernel path
 _generate_initramfs() {
-  local kernel="$1"
-  read -r pkgbase < "${kernel}/pkgbase"
-  local uname="${kernel##/usr/lib/modules/}"
-  local initramfs="/boot/booster-${pkgbase}.img"
+  local pkgbase="$1"
+  local uname="$2"
 
   echo -e "${B}==>${NC} Generating initramfs for ${G}${pkgbase}${NC}..."
 
   # Install the vmlinuz
   if ! _install_vmlinuz "$pkgbase" "$uname"; then return 1; fi
+
+  # Set the booster initramfs file path
+  local initramfs="/boot/booster-${pkgbase}.img"
 
   # Generate initramfs
   if ! booster build --force --kernel-version "$uname" "$initramfs"; then
@@ -156,10 +159,10 @@ _generate_initramfs() {
     return 1
   fi
 
-  # Set the permission to 600 for initramfs file
+  # Set the permission to 600 for the initramfs file
   chmod -f 600 -- "$initramfs"
 
-  # Generate fallback initramfs
+  # Generate the fallback initramfs
   _generate_fallback_initramfs "$pkgbase" "$uname"
 }
 

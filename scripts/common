@@ -43,11 +43,16 @@ _check_pkgbase() {
 _find_kernels() {
   kernels=()
   readarray -t -O "${#kernels[@]}" kernels < <(find /usr/lib/modules \
-    -maxdepth 1 \
-    ! -path '*/\.*' -type d \
-    ! -name 'modules' \
+    -maxdepth 1 ! -path '*/\.*' -type d ! -name 'modules' \
     -exec sh -c 'for path; do if pacman -Qqo -- "$path/pkgbase" > /dev/null 2>&1; then echo $path; fi; done' _ {} +)
 
   # Generate array of valid kernel package names
-  readarray -t pkgbases < <(printf '%s/pkgbase\n' "${kernels[@]}" | xargs -I {} cat {})
+  readarray -t pkgbases < <(printf '%s/pkgbase\n' "${kernels[@]}" | xargs cat)
+}
+
+# Returns the uname for the specified kernel dir
+_get_kernel_uname() {
+  local kernel="$1"
+  uname="${kernel##/usr/lib/modules/}"
+  echo "$uname"
 }

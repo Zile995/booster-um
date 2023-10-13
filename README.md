@@ -33,10 +33,10 @@ Clone the repo or download the [PKGBUILD](https://github.com/Zile995/booster-um/
 
 * booster-um libalpm hooks by default:
   * Remove EFI entries on kernel removal
-  * Remove UKI files from ESP and sbctl database on kernel removal
-  * Regenerate UKIs for all installed kernels when booster, microcode, dkms or firmware files are installed, updated, or removed
-  * Will not sign generated UKI files on microcode, extramodules (nvidia, nvidia-lts etc.) and kernel updates, sbctl hook will do that
-  * Will sign newly created UKI files if they do not exists in the sbctl database. Also, you don't need to manually add UKI files in the sbctl database
+  * Remove UKI files from the ESP and the sbctl database on kernel removal
+  * Regenerate UKI files for all installed kernels when **booster**, **microcode**, **dkms** or **firmware** files are installed, updated, or removed
+  * Will not sign generated UKI files on **microcode**, **extramodules** (`nvidia`, `nvidia-lts` etc.) and kernel updates, **sbctl hook** will do that
+  * Will always sign **newly** created UKI files **if they do not exists** in the sbctl database. You don't need to manually sign or add UKI files in the sbctl database
 
 * Default `booster-um -G` output and `/boot`|`/esp/EFI/LINUX` content:
   * <details>
@@ -75,17 +75,17 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
    secureboot_certificate: /path/to/DB.crt
  ```
 
-* `sign_uki` manages the UKI signing. If enabled, `sbctl`, or `sbsign`, will sign generated UKI files
+* `sign_uki` manages the UKI signing. If enabled, `sbctl` (or `sbsign`), will sign generated UKI files
 
-* `remove_leftovers` manages the removal of leftovers when generating the UKI files. Besides the vmlinuz and booster files, EFI entries, fallback images and kernel cmdlines are treated as leftovers, they will be removed if `efistub`, `cmdline_per_kernel`, `generate_fallback` options are disabled. If enabled, leftovers will always be removed after generating UKI files. Leftovers will always be removed if you manually delete the UKI for the specified kernel (`booster-um -r`)
+* `remove_leftovers` manages the removal of leftovers when generating the UKI files. Besides the vmlinuz and booster files, EFI entries, fallback images and kernel cmdlines are treated as leftovers, they will be removed if `efistub`, `cmdline_per_kernel`, `generate_fallback` options are disabled. If enabled, leftovers will always be removed after generating UKI files. Leftovers will always be removed if you manually delete the UKI for the specified kernel or all installed kernels (`booster-um -r <package>` or `booster-um -R`/`booster-um -C`)
 
-* `cmdline_per_kernel` manages the creation of the cmdline per kernel. If enabled, booster-um will use the kernel parameters from the `/etc/kernel/$pkgbase.cmdline` file. `$pkgbase` is the name of the pacman kernel package name (linux, linux-lts, linux-zen etc.). If this file doesn't exist, booster-um will create it. The default `/etc/kernel/cmdline` will be used as a shared cmdline for all kernels.
+* `cmdline_per_kernel` manages the creation of the cmdline per kernel. If enabled, `booster-um` will use the kernel parameters from the `/etc/kernel/$pkgbase.cmdline` file. `$pkgbase` is the name of the pacman kernel package name (linux, linux-lts, linux-zen etc.). If this file doesn't exist, `booster-um` will create it. The default `/etc/kernel/cmdline` will be used as a shared cmdline for all kernels.
 
-* `generate_fallback` manages the creation of fallback (universal) UKI files. Separate fallback images will not be created if `universal` flag is enabled in `/etc/booster.yaml` config
+* `generate_fallback` manages the creation of fallback (universal) UKI files. Separate fallback images will not be created if `universal` flag is enabled in the `/etc/booster.yaml` config
 
-* `splash` a picture to display during boot picture. The argument is a path to a BMP file. Default `/usr/share/systemd/bootctl/splash-arch.bmp` picture will be used if this path is invalid or not specified
+* `splash` a picture to display during boot. The argument is a path to a BMP file. The default `/usr/share/systemd/bootctl/splash-arch.bmp` picture will be used if this path is invalid or not specified.
 
-* `efistub` manages EFI entries. If enabled, booster-um will create a new EFI entry. Also, the booster-um will by default preserve old boot order and add the newly created EFI entry at the **end** of the boot order
+* `efistub` manages EFI entries. If enabled, `booster-um` will create a new EFI entry. The `booster-um` will by default preserve old boot order and add the newly created EFI entry at the **end** of the boot order
 * `efistub_config` node provides additional efistub configuration. It is currently possible to control addition of newly created efi entries to the current boot order:
   * `preserve_boot_order` preserves the old boot order. If enabled, newly created EFI entries will be added to the end of the boot order, otherwise they will be added to the beginning
 
@@ -110,7 +110,7 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
 * Optionally you can delete the initramfs files of other generators, as well as the entire `esp/EFI/Linux` directory, simply by running `booster-um -C`
 * Regenerate all images with `booster-um -G`
 * If you have enabled the creation of EFI entries, you may need to change the boot order after generating the UKI files. You can change it like this (put your boot numbers here): `efibootmgr -o 3,1,0`
-* `systemd-boot` will, if installed, detect UKI files generated by booster-um. For more information about booting, see the [Unified kernel image - Booting](https://wiki.archlinux.org/title/Unified_kernel_image#Booting) article
+* `systemd-boot` will, if installed, detect UKI files generated by `booster-um`. For more information about booting, see the [Unified kernel image - Booting](https://wiki.archlinux.org/title/Unified_kernel_image#Booting) article
 
 ## Usage (help output)
 ```Shell

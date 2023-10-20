@@ -47,7 +47,7 @@ _find_kernels() {
     -exec sh -c 'for path; do if pacman -Qqo -- "$path/pkgbase" > /dev/null 2>&1; then echo $path; fi; done' _ {} +)
 
   # Generate array of valid kernel package names
-  readarray -t pkgbases < <(printf '%s/pkgbase\n' "${kernels[@]}" | xargs cat)
+  readarray -t pkgbases < <(printf '%s/pkgbase\n' "${kernels[@]}" | xargs -I {} cat {} 2>/dev/null)
 }
 
 # Returns the uname for the specified kernel dir

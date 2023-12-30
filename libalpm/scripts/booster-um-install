@@ -15,7 +15,11 @@ add_uname() {
 
 while read -r line; do
   case "$line" in
-    usr/bin/booster | usr/lib/booster/* | usr/src/*/dkms.conf | usr/lib/firmware/*)
+    usr/src/*/dkms.conf | usr/lib/firmware/*)
+      sign_all=1
+      break
+      ;;
+    usr/bin/booster | usr/bin/booster-um | usr/lib/booster/*)
       sign_all=1
       break
       ;;

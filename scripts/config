@@ -15,10 +15,16 @@ declare -g BOOSTER_CONFIG=/etc/booster.yaml
 # Checks if booster-um.yaml config is valid
 _check_config() {
   [[ ! -e $CONFIG ]] && config_valid=$((1-$?)) && return
-  config_valid=$(yq --exit-status "$CONFIG" &>/dev/null; echo "$?")
-  if [[ $config_valid -ne 0 ]]; then
-    echo -e "${R}==>${NC} ${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."
+
+  if [[ ! -s $CONFIG ]]; then
+    config_valid=1
+  else
+    config_valid=$(yq --exit-status "$CONFIG" &>/dev/null; echo "$?")
+    if [[ $config_valid -ne 0 ]]; then
+      echo -e "${R}==>${NC} ${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."
+    fi
   fi
+
   _set_signing_tool
 }
 

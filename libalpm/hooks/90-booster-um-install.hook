@@ -12,6 +12,11 @@ Target = usr/lib/modules/*/extramodules/*
 
 [Trigger]
 Type = Path
+Operation = Upgrade
+Target = usr/bin/booster-um
+
+[Trigger]
+Type = Path
 Operation = Remove
 Target = boot/*-ucode.img
 Target = usr/lib/firmware/*

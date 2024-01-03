@@ -17,8 +17,9 @@ _generate_uki() {
   VMLINUZ="/boot/vmlinuz-${pkgbase}"
 
   # booster initramfs
-  local booster_inits=("/boot/booster-${pkgbase}.img")
-  if _should_generate_fallback; then
+  local -a booster_inits=()
+  [[ "${initramfs_config[$pkgbase]}" =~ "default" ]] && booster_inits+=("/boot/booster-${pkgbase}.img")
+  if _should_generate_fallback && [[ "${initramfs_config[$pkgbase]}" =~ "fallback" ]]; then
     booster_inits+=("/boot/booster-${pkgbase}-fallback.img")
   fi
 
@@ -64,14 +65,14 @@ _generate_uki() {
                 ${secureboot_certificate:+"--secureboot-certificate=$secureboot_certificate"})
   fi
 
-  for init_id in "${!booster_inits[@]}"; do
-    local booster_initramfs="${booster_inits[init_id]}"
-
+  for booster_initramfs in "${booster_inits[@]}"; do
     # Create one initrd
     cat -- "${microcodes[@]}" "$booster_initramfs" > "$INITRD"
 
     # Set UKI fallback path
-    [[ $init_id -gt 0 ]] && uki_path="${uki_path}-fallback"
+    if [[ $booster_initramfs =~ "$pkgbase-fallback.img" ]]; then
+      uki_path="${uki_path}-fallback"
+    fi
 
     # Set the UKI file with .efi exstension
     UKI="${uki_path}.efi"
@@ -152,15 +153,17 @@ _generate_initramfs() {
   # Set the booster initramfs file path
   local initramfs="/boot/booster-${pkgbase}.img"
 
-  # Generate initramfs
-  if ! booster build --force --kernel-version "$uname" "$initramfs"; then
-    echo -e "${R}==>${NC} Unable to generate initramfs for ${R}${pkgbase}${NC}..."
-    _remove_leftovers "$pkgbase" 1
-    return 1
-  fi
+  if [[ "${initramfs_config[$pkgbase]}" =~ "default" ]]; then
+    # Generate initramfs
+    if ! booster build --force --kernel-version "$uname" "$initramfs"; then
+      echo -e "${R}==>${NC} Unable to generate initramfs for ${R}${pkgbase}${NC}..."
+      _remove_leftovers "$pkgbase" 1
+      return 1
+    fi
 
-  # Set the permission to 600 for the initramfs file
-  chmod -f 600 -- "$initramfs"
+    # Set the permission to 600 for the initramfs file
+    chmod -f 600 -- "$initramfs"
+  fi
 
   # Generate the fallback initramfs
   _generate_fallback_initramfs "$pkgbase" "$uname"
@@ -191,6 +194,9 @@ _generate_fallback_initramfs() {
 
   local uname pkgbase fallback_initramfs
   pkgbase="$1"
+
+  [[ "${initramfs_config[$pkgbase]}" =~ "fallback" ]] || return 0
+
   uname="$2"
   fallback_initramfs="/boot/booster-${pkgbase}-fallback.img"
 

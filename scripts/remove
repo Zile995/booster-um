@@ -43,15 +43,19 @@ _remove_other_leftovers() {
     # Remove efi entry
     _remove_efi_entry "$uki"
 
+    # Remove default UKI
+    rm -f "$uki"
+
     # Remove the fallback UKI from the sbctl db and remove the fallback EFI entry
     if [[ -e $fallback_uki ]]; then
       echo -e "${Y}==>${NC} Removing ${Y}${fallback_uki}${NC} file..."
       _remove_from_db "$fallback_uki"
       _remove_efi_entry "$fallback_uki"
+      rm -f "$fallback_uki"
     fi
 
-    # Remove UKI files from EFI dir
-    rm -f "$uki" "$fallback_uki"
+    # Remove the pkgbase cmdline
+    _remove_cmdline "$pkgbase"
 
     return
   fi
@@ -59,13 +63,25 @@ _remove_other_leftovers() {
   # Remove fallback UKI files in ESP if fallback generation is not enabled
   if ! _should_generate_fallback && [[ -e $fallback_uki ]]; then
     _remove_from_db "$fallback_uki"
-    _remove_efi_entry "$fallback_uki" && local fallback_removed=1
-    rm -f "$fallback_uki"
+    _remove_efi_entry "$fallback_uki"
+    rm -f "$fallback_uki" && local fallback_removed=1
+  fi
+
+  if [[ ! "${initramfs_config[$pkgbase]}" =~ "default" ]]; then
+    _remove_from_db "$uki"
+    _remove_efi_entry "$uki"
+    rm -f "$uki" && local default_removed=1
+  fi
+
+  if [[ ! "${initramfs_config[$pkgbase]}" =~ "fallback" && -z $fallback_removed ]]; then
+    _remove_from_db "$fallback_uki"
+    _remove_efi_entry "$fallback_uki"
+    rm -f "$fallback_uki" && local fallback_removed=1
   fi
 
   # Remove efi entry if efistub is not enabled
   if ! _should_create_efi_entry; then
-    _remove_efi_entry "$uki"
+    [[ -z $default_removed ]] && _remove_efi_entry "$uki"
     [[ -z $fallback_removed ]] && _remove_efi_entry "$fallback_uki"
   fi
 

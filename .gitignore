@@ -13,3 +13,6 @@ booster-um-git/
 # Do not ignore common files
 !*.diff
 !*.patch
+
+# Ignore vscode
+.vscode/*

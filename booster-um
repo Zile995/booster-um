@@ -25,6 +25,9 @@ main() {
   # Find all installed kernels
   _find_kernels
 
+  # Set initramfs config for all installed kernels
+  _set_initramfs_config
+
   case "${arg}" in
     -g)
       # Always regenerate initramfs

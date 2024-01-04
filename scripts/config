@@ -8,6 +8,9 @@ declare -g sbsign=0
 # A value of 0 means that the booster-um config is valid
 declare -g config_valid=0
 
+# Array with initramfs configs
+declare -A initramfs_config
+
 # Configs
 declare -g CONFIG=/etc/booster-um.yaml
 declare -g BOOSTER_CONFIG=/etc/booster.yaml
@@ -94,6 +97,19 @@ _is_bmp() {
   # If the the splash exists and is a BMP file, return
   if [[ -e $splash && $(file -b --mime-type "$splash") == 'image/bmp' ]]; then return; fi
   false
+}
+
+# Sets the initramfs config for all kernels
+_set_initramfs_config() {
+  local -a value=()
+  for pkgbase in "${pkgbases[@]}"; do
+    readarray value < <(yq ".initramfs_config.${pkgbase}[]" "$CONFIG");
+    if [[ ${#value[@]} -eq 1 && "${value[@]}" =~ "fallback" ]] && ! _should_generate_fallback; then
+      value=(default)
+    fi
+    [[ ${#value[@]} -eq 0 ]] && value=(default fallback)
+    initramfs_config[$pkgbase]="${value[@]}"
+  done
 }
 
 # Returns the splash file path

@@ -58,9 +58,15 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
  ```YAML
  sign_uki: true
  remove_leftovers: true
- generate_fallback: false
  cmdline_per_kernel: false
  splash: /usr/share/systemd/bootctl/splash-arch.bmp
+
+ generate_fallback: false
+ initramfs_config:
+   linux: [default, fallback]
+   # There are two types: default and fallback
+   # linux-lts: [fallback]
+   # linux-zen: [default] 
  
  efistub: false
  efistub_config:
@@ -81,9 +87,11 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
 
 * `cmdline_per_kernel` manages the creation of the cmdline per kernel. If enabled, `booster-um` will use the kernel parameters from the `/etc/kernel/$pkgbase.cmdline` file. `$pkgbase` is the name of the pacman kernel package name (linux, linux-lts, linux-zen etc.). If this file doesn't exist, `booster-um` will create it. The default `/etc/kernel/cmdline` will be used as a shared cmdline for all kernels.
 
-* `generate_fallback` manages the creation of fallback (universal) UKI files. Separate fallback images will not be created if `universal` flag is enabled in the `/etc/booster.yaml` config
-
 * `splash` a picture to display during boot. The argument is a path to a BMP file. The default `/usr/share/systemd/bootctl/splash-arch.bmp` picture will be used if this path is invalid or not specified.
+  
+* `generate_fallback` manages the creation of fallback (universal) UKI files. Separate fallback images will not be created if `universal` flag is enabled in the `/etc/booster.yaml` config
+  
+* `initramfs_config` node provides initramfs type configuration. Under this node, you can specify up to two types for selected **kernel package name**: `default` and `fallback`. If you specified `fallback` type, note that you must enable `generate_fallback`, otherwise it will generate `default` images.
 
 * `efistub` manages EFI entries. If enabled, `booster-um` will create a new EFI entry. The `booster-um` will by default preserve old boot order and add the newly created EFI entry at the **end** of the boot order
 * `efistub_config` node provides additional efistub configuration. It is currently possible to control addition of newly created efi entries to the current boot order:

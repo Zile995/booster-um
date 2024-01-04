@@ -37,14 +37,14 @@ _remove_other_leftovers() {
 
   # If the package doesn't exist, remove UKI and leftovers
   if ! _pkgbase_exists "$pkgbase"; then
-    echo -e "${Y}==>${NC} Removing ${Y}${uki}${NC} file..."
-    _remove_from_db "$uki"
 
-    # Remove efi entry
-    _remove_efi_entry "$uki"
-
-    # Remove default UKI
-    rm -f "$uki"
+    # Remove the default UKI from the sbctl db and remove the default EFI entry
+    if [[ -e $uki ]]; then
+      echo -e "${Y}==>${NC} Removing ${Y}${uki}${NC} file..."
+      _remove_from_db "$uki"
+      _remove_efi_entry "$uki"
+      rm -f "$uki"
+    fi
 
     # Remove the fallback UKI from the sbctl db and remove the fallback EFI entry
     if [[ -e $fallback_uki ]]; then

@@ -1,0 +1,28 @@
+_booster-um_module() {
+  local cur prev completions
+  COMPREPLY=()
+  cur=${COMP_WORDS[COMP_CWORD]}
+  prev=${COMP_WORDS[COMP_CWORD-1]}
+
+  case "$prev" in
+    -g|-r)
+      kernels=$(find /usr/lib/modules/* \
+              -mindepth 1 -maxdepth 1 \
+              ! -path '*/\.*' ! -path '*/build' -type f -name 'pkgbase' \
+              -exec sh -c 'if pacman -Qqo -- "$0" > /dev/null 2>&1; then cat "$0"; fi;' {} \; | \
+              sort -n)
+      COMPREPLY=( $(compgen -W "${kernels[@]}" -- "$cur") )
+      return
+      ;;
+  esac
+
+  case $cur in
+    *)
+      completions=$(booster-um --help | grep -oE ' (-[[:alnum:]@-]+)' | tr -d ' ' | sort -u)
+      COMPREPLY=( $(compgen -W "$completions" -- "$cur") )
+      return
+      ;;
+  esac
+}
+
+complete -o bashdefault -o default -F _booster-um_module booster-um

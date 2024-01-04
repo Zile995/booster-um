@@ -1,0 +1,42 @@
+#compdef booster-um
+
+__booster-um() {
+  local line state
+
+  _arguments -C \
+    "1: :->cmds" \
+    "*::arg:->args"
+
+  case "$state" in
+    cmds)
+      _init
+      ;;
+    args)
+      case $line[1] in
+        -r|-g)
+          _kernel_comp
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_init() {
+  _arguments -s \
+    "-g[Generate UKI file for specified kernel package name]" \
+    "(- *)"{-h,--help}"[Show help information]" \
+    "-r[Remove UKI file for specified kernel package name]" \
+    "-C[Remove initramfs*, booster*, vmlinuz* files, entire esp/EFI/Linux dir and other leftovers]" \
+    "-G[Generate UKI files for all installed kernels]" \
+    "-R[Remove known booster*, vmlinuz*, UKI files and other leftovers for all installed kernels]"
+}
+
+_kernel_comp() {
+  compadd $(find /usr/lib/modules/* \
+    -mindepth 1 -maxdepth 1 \
+    ! -path '*/\.*' ! -path '*/build' -type f -name 'pkgbase' \
+    -exec zsh -c 'if pacman -Qqo -- "$0" > /dev/null 2>&1; then cat "$0"; fi;' {} \; | \
+    sort -n)
+}
+
+__booster-um

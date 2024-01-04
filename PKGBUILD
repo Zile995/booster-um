@@ -48,6 +48,10 @@ package() {
     install -Dm0644 "$libalpm_hook" -t "${pkgdir}/usr/share/libalpm/hooks"
   done
 
+  # Install completions
+  install -Dm644 "completions/zsh/_${pkgname%-*}" -t "${pkgdir}/usr/share/zsh/site-functions/"
+  install -Dm644 "completions/bash/${pkgname%-*}" -t "${pkgdir}/usr/share/bash-completion/completions"
+
   # Install the LICENSE
   install -Dm0644 LICENSE -t "${pkgdir}/usr/share/licenses/${pkgname}"
 }

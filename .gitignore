@@ -1,10 +1,16 @@
 # Ignore makepkg files and dirs
 pkg/
 src/
-booster-um-git/
+booster-um*/
 
 # Ignore pacman packages
 *.pkg.tar.zst
+
+# Ignore archive
+booster-um*.zip
+
+# Ignore vscode
+.vscode/
 
 # Do not ignore PKGBUILD files
 !PKGBUILD
@@ -13,6 +19,3 @@ booster-um-git/
 # Do not ignore common files
 !*.diff
 !*.patch
-
-# Ignore vscode
-.vscode/*

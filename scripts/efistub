@@ -12,6 +12,12 @@ declare -g EFI_DIR
 # EFI System Partition mount point. Examples: /boot, /efi, /boot/efi
 declare -g ESP_MOUNT
 
+# EFI System Partition UUID
+declare -g ESP_PARTUUID
+
+# Boot order array
+declare -a boot_order=()
+
 # Sets EFI dir path
 _set_efi_path() {
   local esp_path boot_path
@@ -44,16 +50,17 @@ _set_efi_path() {
     ESP="$(findmnt --real -nreo source "${ESP_MOUNT}")"
   fi
 
+  ESP_PARTUUID="$(partx -g -o UUID "$ESP")"
+
   # Trigger any potential automounts
   stat -- /boot /efi "$EFI_DIR" &>/dev/null || :
 }
 
 # Checks if efi entry exists
 _efi_entry_exists() {
-  local loader_path esp_partuuid
+  local loader_path
   loader_path="$1"
-  esp_partuuid="$(partx -g -o UUID "${ESP}")"
-  efibootmgr | grep -w "$esp_partuuid" | grep -Fwq -e "${loader_path}" -e "${loader_path^^}"
+  efibootmgr | grep -w "$ESP_PARTUUID" | grep -Fwq -e "${loader_path}" -e "${loader_path^^}"
 }
 
 # Extracts the pkgbase from known UKI file path
@@ -89,6 +96,14 @@ _get_label() {
   echo "$label"
 }
 
+# Get the tmp file path
+# This file contains the boot index
+_get_tmp_index_file() {
+  local uki="$1"
+  uki="${uki#"$EFI_DIR"}"
+  echo "/tmp${uki%.efi}.index"
+}
+
 # Preserves the old boot order
 _preserve_boot_order() {
   if ! _should_preserve_boot_order; then return; fi
@@ -106,12 +121,45 @@ _preserve_boot_order() {
   efibootmgr -o "$old_boot_order,${boot_order[0]%%,}" -q
 }
 
+# Saves the boot index for the specified UKI path
+_save_boot_index() {
+  # Return if efibootmgr doesn't exist
+  if ! _command_exists efibootmgr || ! _should_create_efi_entry; then return; fi
+
+  local uki="$1"
+  local tmp_index_file="$(_get_tmp_index_file "$uki")"
+  
+  # Get the boot order list
+  [[ ${#boot_order[@]} -eq 0 ]] &&
+  readarray -d ' ' boot_order < <(efibootmgr | grep -w "BootOrder" | sed -r 's/,/ /g;s/0+([0-9]+)/\1/g;s/BootOrder: //')
+
+  local loader_path="$(_get_formatted_efi_path "$uki")"
+
+  # Find the boot number for the specified loader path
+  local boot_number=$(efibootmgr | \
+          grep -Fw -e ${loader_path^^} | \
+          cut -f1 -d ' ' | \
+          sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
+
+  # Find the boot number index in boot order
+  for boot_index in "${!boot_order[@]}"; do
+    if [[ ${boot_order[$boot_index]} -eq $boot_number ]]; then
+       local index="$boot_index"
+       break
+    fi
+  done
+  
+  # Create the temp file and save the index
+  (umask 077; touch "$tmp_index_file")    
+  echo "$index" > "$tmp_index_file"
+}
+
 # Adds the EFI entry
 _create_efi_entry() {
   # Return if efibootmgr doesn't exist
   if ! _command_exists efibootmgr || ! _should_create_efi_entry; then return; fi
 
-  local uki loader_path pkgbase
+  local uki loader_path pkgbase index
   uki="$1"
 
   # Set loader path with backslashes
@@ -137,18 +185,26 @@ _create_efi_entry() {
   # Set OS label to NAME + (pkgbase): Example: Arch Linux (linux)
   label="$(_get_label "$pkgbase")"
 
+  # Get the temp index file
+  local tmp_index_file=$(_get_tmp_index_file "$uki")
+  if [[ -e $tmp_index_file ]]; then
+    read index < "$tmp_index_file"
+    rm -f "$tmp_index_file"
+  fi
+
   echo -e "${B} ->${NC} Creating EFI entry ${G}${label}${NC}..."
 
   # Add the EFI entry
   efibootmgr --create \
-    --label "${label}" \
     --disk "${disk}" \
     --part "${esp_number}" \
+    --label "${label}" \
     --loader "${loader_path^^}" \
+    ${index:+"--index" ${index}} \
     --unicode -q
 
   # Preserve old boot order
-  _preserve_boot_order
+  [[ -z $index ]] && _preserve_boot_order || :
 }
 
 # Removes the EFI entry

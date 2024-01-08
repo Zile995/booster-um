@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+set -e
+
+pkgbases=()
+
+while read -r line; do
+  case "$line" in
+    usr/bin/booster-um)
+      booster-um -R
+      break
+      ;;
+    usr/lib/modules/*/vmlinuz)
+      kernel="/${line%/vmlinuz}"
+      if pacman -Qqo -- "${kernel}/pkgbase" > /dev/null 2>&1; then
+        read -r pkgbase < "${kernel}/pkgbase"
+        pkgbases+=("$pkgbase")
+      fi
+      ;;
+  esac
+done
+
+booster-um -p "${pkgbases[@]}"

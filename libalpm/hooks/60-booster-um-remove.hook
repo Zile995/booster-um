@@ -1,10 +1,11 @@
 [Trigger]
 Type = Path
 Operation = Remove
+Target = usr/bin/booster-um
 Target = usr/lib/modules/*/vmlinuz
 
 [Action]
 Description = Removing UKI leftovers...
-When = PostTransaction
-Exec = /usr/bin/booster-um -p
+When = PreTransaction
+Exec = /usr/share/libalpm/scripts/booster-um-remove
 NeedsTargets

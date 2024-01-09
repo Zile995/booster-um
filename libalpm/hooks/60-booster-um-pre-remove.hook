@@ -1,0 +1,10 @@
+[Trigger]
+Type = Path
+Operation = Remove
+Target = usr/bin/booster-um
+
+[Action]
+Description = Removing all UKI files...
+When = PreTransaction
+Exec = /usr/bin/booster-um -R
+NeedsTargets

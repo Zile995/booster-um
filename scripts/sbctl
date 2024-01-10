@@ -3,9 +3,11 @@
 set -e
 
 # Flag which controls UKI signing
-# If this value is set to 1, then the UKI file will be always signed.
-# If this value is set to 0, then the UKI file will be signed if it does not exist in the sbctl database
-declare -g always_sign=1
+# If this value is set to 0, then the UKI file will be always signed.
+# If this value is set to 1, then the UKI file will be signed if it does not exist in the sbctl database
+if [[ -z $ALWAYS_SIGN ]]; then
+  ALWAYS_SIGN=0
+fi
 
 # Checks if the file is in the sbctl database
 _in_db() {
@@ -17,10 +19,10 @@ _sign_uki() {
   local uki="$1"
   # Return if sbsign is used or if the sbctl is not installed.
   # Also return if the UKI should not be signed
-  if [[ $sbsign -eq 1 ]] || ! _command_exists sbctl || ! _should_sign_uki; then return; fi
+  if [[ $SBSIGN -eq 0 ]] || ! _command_exists sbctl || ! _should_sign_uki; then return; fi
 
   # Sbctl hook should sign the UKI file if it already exists in database
-  if [[ $always_sign -eq 0 ]] && _in_db "$uki"; then return; fi
+  if [[ $ALWAYS_SIGN -eq 1 ]] && _in_db "$uki"; then return; fi
 
   # Sign UKI file with sbctl
   sbctl sign --save "$uki" || :

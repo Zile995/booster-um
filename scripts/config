@@ -3,10 +3,10 @@
 set -e
 
 # Disable sbsign by default
-declare -g sbsign=0
+declare -g SBSIGN=1
 
 # A value of 0 means that the booster-um config is valid
-declare -g config_valid=0
+declare -g CONFIG_VALID=0
 
 # Array with initramfs configs
 declare -A initramfs_config
@@ -17,13 +17,13 @@ declare -g BOOSTER_CONFIG=/etc/booster.yaml
 
 # Checks if booster-um.yaml config is valid
 _check_config() {
-  [[ ! -e $CONFIG ]] && config_valid=$((1-$?)) && return
+  [[ ! -e $CONFIG ]] && CONFIG_VALID=$((1-$?)) && return
 
   if [[ ! -s $CONFIG ]]; then
-    config_valid=1
+    CONFIG_VALID=1
   else
-    config_valid=$(yq --exit-status "$CONFIG" &>/dev/null; echo "$?")
-    if [[ $config_valid -ne 0 ]]; then
+    CONFIG_VALID=$(yq --exit-status "$CONFIG" &>/dev/null; echo "$?")
+    if [[ $CONFIG_VALID -ne 0 ]]; then
       echo -e "${R}==>${NC} ${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."
     fi
   fi
@@ -32,53 +32,53 @@ _check_config() {
 }
 
 _set_signing_tool() {
-  [[ $config_valid -eq 1 ]] && return
-  if _command_exists sbsign && yq '.sbsign == true' "$CONFIG" | grep -Fqwx -- 'true'; then sbsign=1; fi
+  [[ $CONFIG_VALID -eq 1 ]] && return
+  if _command_exists sbsign && yq '.sbsign == true' "$CONFIG" | grep -Fqwx -- 'true'; then SBSIGN=0; fi
 }
 
 # Checks if the creation of universal images is enabled
 _is_universal() {
-  [[ $config_valid -eq 1 ]] && return 1
+  [[ $CONFIG_VALID -eq 1 ]] && return 1
   yq '.universal == true' "$BOOSTER_CONFIG" | grep -Fqwx -- 'true'
 }
 
 # Checks if the booster-um should always generate a fallback UKI
 _should_generate_fallback() {
-  [[ $config_valid -eq 1 ]] && return 1
+  [[ $CONFIG_VALID -eq 1 ]] && return 1
   if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' && ! _is_universal; then return; fi
   false
 }
 
 # Checks if the booster-um should always sign generated UKI
 _should_sign_uki() {
-  [[ $config_valid -eq 1 ]] && return
+  [[ $CONFIG_VALID -eq 1 ]] && return
   if ! yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
 # Checks if the booster-um should remove leftovers (vmlinuz and initramfs)
 _should_remove_leftovers() {
-  [[ $config_valid -eq 1 ]] && return
+  [[ $CONFIG_VALID -eq 1 ]] && return
   if ! yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
 # Checks if the booster-um should create EFI entry
 _should_create_efi_entry() {
-  [[ $config_valid -eq 1 ]] && return 1
+  [[ $CONFIG_VALID -eq 1 ]] && return 1
   if yq '.efistub == true' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
 # Checks if the booster-um should create EFI entry
 _should_preserve_boot_order() {
-  [[ $config_valid -eq 1 ]] && return
+  [[ $CONFIG_VALID -eq 1 ]] && return
   if ! yq '.efistub_config.preserve_boot_order == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
 
 _cmdline_per_kernel() {
-  [[ $config_valid -eq 1 ]] && return 1
+  [[ $CONFIG_VALID -eq 1 ]] && return 1
   if yq '.cmdline_per_kernel == true' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
   false
 }
@@ -118,7 +118,7 @@ _get_splash_path() {
   local default_splash=/usr/share/systemd/bootctl/splash-arch.bmp
 
   # If the config file doesn't exist or is not valid, use the default arch linux splash
-  if [[ $config_valid -eq 1 ]] && _is_bmp "$default_splash"; then
+  if [[ $CONFIG_VALID -eq 1 ]] && _is_bmp "$default_splash"; then
     echo "$default_splash" && return
   fi
 

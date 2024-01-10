@@ -51,7 +51,7 @@ _generate_uki() {
   local uki_path="${EFI_DIR}/arch-${pkgbase}"
 
   local -a sign_args=()
-  if [[ $sbsign -eq 1 ]] && _should_sign_uki; then
+  if [[ $SBSIGN -eq 0 ]] && _should_sign_uki; then
     local pcr_banks="$(_get_sbsign_property pcr_banks)"
     local pcr_private_key="$(_get_sbsign_property pcr_private_key)"
     local pcr_public_key="$(_get_sbsign_property pcr_public_key)"

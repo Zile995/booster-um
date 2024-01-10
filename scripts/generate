@@ -92,7 +92,7 @@ _generate_uki() {
   done
 
   # Remove the leftovers (vmlinuz, booster initramfs and other files)
-  _remove_leftovers "$pkgbase" 1
+  _remove_leftovers "$pkgbase"
 }
 
 # Generates UKI file for specified kernel package name
@@ -157,7 +157,7 @@ _generate_initramfs() {
     # Generate initramfs
     if ! booster build --force --kernel-version "$uname" "$initramfs"; then
       echo -e "${R}==>${NC} Unable to generate initramfs for ${R}${pkgbase}${NC}..."
-      _remove_leftovers "$pkgbase" 1
+      _remove_leftovers "$pkgbase"
       return 1
     fi
 

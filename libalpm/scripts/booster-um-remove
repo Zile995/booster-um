@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+set -e
+
+kernels=()
+
+while read -r line; do
+  case "$line" in
+    usr/bin/booster-um)
+      booster-um -R
+      exit
+      ;;
+    usr/lib/modules/*/vmlinuz)
+      kernels+=("/${line%/vmlinuz}")
+      ;;
+  esac
+done
+
+for kernel in "${kernels[@]}"; do
+  if ! pacman -Qqo -- "${kernel}/pkgbase" > /dev/null 2>&1; then
+    # if pkgbase does not belong to any package then skip this kernel
+    continue
+  fi
+  read -r pkgbase < "${kernel}/pkgbase"
+
+  # Remove the UKI file
+  export REMOVE_EFI=1; booster-um -r "$pkgbase"
+done

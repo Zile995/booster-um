@@ -42,8 +42,8 @@ main() {
       ;;
     -p)
       # This argument is used in libalpm remove hook
-      # Remove UKI files and other leftovers for removed kernels
-      _post_transaction_remove || exit 0
+      # Remove orphaned EFI entries
+      _remove_orphaned_efi_entries
       ;;
     -C)
       # Cleanup

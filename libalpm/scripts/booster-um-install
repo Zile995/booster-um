@@ -39,9 +39,12 @@ if [ "${sign_all}" -eq "1" ]; then
   exit
 fi
 
+# Sbctl hook should sign the UKI file if it already exists in database
+export ALWAYS_SIGN=1
+
 # Generate UKI files for all kernels
 if [ "${all}" -eq "1" ]; then
-  booster-um -U
+  booster-um -G
   exit
 fi
 

@@ -9,6 +9,9 @@ declare -g ESP
 # EFI dir path of the directory where the UKI files are located. Example: esp/EFI/Linux
 declare -g EFI_DIR
 
+# ESP partition UUID
+declare -g ESP_PARTUUID
+
 # EFI System Partition mount point. Examples: /boot, /efi, /boot/efi
 declare -g ESP_MOUNT
 
@@ -44,6 +47,8 @@ _set_efi_path() {
     ESP="$(findmnt --real -nreo source "${ESP_MOUNT}")"
   fi
 
+  ESP_PARTUUID="$(partx -g -o UUID "${ESP}")"
+
   # Trigger any potential automounts
   stat -- /boot /efi "$EFI_DIR" &>/dev/null || :
 }
@@ -52,8 +57,7 @@ _set_efi_path() {
 _efi_entry_exists() {
   local loader_path esp_partuuid
   loader_path="$1"
-  esp_partuuid="$(partx -g -o UUID "${ESP}")"
-  efibootmgr | grep -w "$esp_partuuid" | grep -Fwq -e "${loader_path}" -e "${loader_path^^}"
+  efibootmgr | grep -w "$ESP_PARTUUID" | grep -Fwq -e "${loader_path}" -e "${loader_path^^}"
 }
 
 # Extracts the pkgbase from known UKI file path
@@ -68,7 +72,7 @@ _get_pkgbase_from_path() {
 }
 
 # Formats the efi path to be readable by efibootmgr
-_get_formatted_efi_path() {
+_get_loader_path() {
   local efi
   efi="$1"
 
@@ -77,6 +81,25 @@ _get_formatted_efi_path() {
   # Set loader path with backslashes
   efi_path="${efi_path//\//\\}"
   echo "$efi_path"
+}
+
+# Checks if loader file exists
+_loader_file_exists() {
+  local loader_path uki_name uki_path
+  loader_path="$1"
+
+  # Remove string prefix, before last \ char
+  # \EFI\LINUX\ARCH-LINUX.EFI -> ARCH-LINUX.EFI
+  uki_name="${loader_path##*\\}"
+
+  # Lowercase name
+  uki_name="${uki_name,,}"
+
+  # Set the UKI file path
+  uki_path="${EFI_DIR}/${uki_name}"
+
+  # Check if the UKI file exists
+  [[ -f $uki_path ]]
 }
 
 # Returns the EFI entry label
@@ -115,7 +138,7 @@ _create_efi_entry() {
   uki="$1"
 
   # Set loader path with backslashes
-  loader_path="$(_get_formatted_efi_path "$uki")"
+  loader_path="$(_get_loader_path "$uki")"
 
   # Return if the entry exists
   if _efi_entry_exists "$loader_path"; then return; fi
@@ -160,7 +183,7 @@ _remove_efi_entry() {
   uki="$1"
 
   # Set loader path with backslashes
-  loader_path="$(_get_formatted_efi_path "$uki")"
+  loader_path="$(_get_loader_path "$uki")"
 
   # Find all known labels
   readarray -t labels < <(efibootmgr | \
@@ -180,4 +203,45 @@ _remove_efi_entry() {
   for boot_num in "${boot_nums[@]}"; do
     efibootmgr -b "$boot_num" -B > /dev/null
   done
+}
+
+# Removes orphaned EFI entries
+_remove_orphaned_efi_entries() {
+    # Return if efibootmgr doesn't exist
+  if ! _command_exists efibootmgr; then exit; fi
+
+  local search="${EFI_DIR#$ESP_MOUNT}/arch-"
+  search="${search//\//\\}"
+
+  # Get all uniqe loader paths
+  readarray -t loader_paths < <(efibootmgr | \
+    grep -w "$ESP_PARTUUID" | grep -Fi "$search" | \
+    sed 's/.*(\(.*\))/\1/' | uniq -u)
+
+  for loader_path in "${loader_paths[@]}"; do
+    if ! _loader_file_exists "$loader_path"; then
+      # Get the boot number
+      readarray -t boot_nums < <(efibootmgr | \
+        grep -Fw "$loader_path" | \
+        awk '{ print $1 }' | \
+        sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
+
+      # Get the labels
+      readarray -t labels < <(efibootmgr | \
+        grep -Fw "$loader_path" | \
+        sed 's/.*\*[[:blank:]]\(.*\)[[:blank:]]\(.*\)/\1/')
+
+      for label in "${labels[@]}"; do
+        echo -e "${Y} ->${NC} Removing EFI entry ${Y}${label}${NC}..."
+      done
+
+      # Remove the EFI entries
+      for boot_num in "${boot_nums[@]}"; do
+        efibootmgr -b "$boot_num" -B > /dev/null
+      done
+    fi
+  done
+
+  # One shot function, just exit
+  exit
 }

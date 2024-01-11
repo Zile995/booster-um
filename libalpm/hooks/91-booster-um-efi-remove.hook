@@ -4,7 +4,7 @@ Operation = Remove
 Target = usr/lib/modules/*/vmlinuz
 
 [Action]
-Description = Removing UKI leftovers...
+Description = Removing orphaned EFI entries...
 When = PostTransaction
 Exec = /usr/bin/booster-um -p
 NeedsTargets

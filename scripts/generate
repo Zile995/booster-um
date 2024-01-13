@@ -85,7 +85,7 @@ _generate_uki() {
       ${CMDLINE:+"--cmdline=$CMDLINE"} \
       ${SPLASH:+"--splash=$SPLASH"} "${sign_args[@]}" \
       --output="$UKI" | tail -n 1 && \
-      _sign_uki "$UKI" && _create_efi_entry "$UKI"
+      _sign_uki "$UKI" && _create_efi_entry "$UKI" || :
 
     # Remove the old initrd after creating the UKI file
     rm -f "$INITRD"

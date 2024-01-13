@@ -78,7 +78,7 @@ _generate_uki() {
     UKI="${uki_path}.efi"
 
     # Build the UKI file, sign it and create EFI entry
-    /usr/lib/systemd/ukify build \
+    ukify build \
       --uname="$UNAME" \
       --linux="$VMLINUZ" \
       --initrd="$INITRD" \

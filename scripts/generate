@@ -207,6 +207,10 @@ _generate_fallback_initramfs() {
 
 # Regenerates UKI files for all installed kernels
 _regenerate_all() {
+  [[ ${#kernels[@]} -eq 0 ]] && {
+    echo -e "${R}There are no kernels. Please install at least one kernel.${NC}"
+    exit
+  }
   echo -e "${B}::${W} Generating initramfs for all installed kernels...${NC}"
   _regenerate_images || :
   echo -e "${B}::${W} Generating UKI files for all installed kernels...${NC}"

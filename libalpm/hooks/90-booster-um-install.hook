@@ -1,22 +1,20 @@
 [Trigger]
 Type = Path
-Operation = Install
-Operation = Upgrade
-Target = boot/*-ucode.img
-Target = usr/bin/booster
-Target = usr/lib/booster/*
-Target = usr/lib/firmware/*
-Target = usr/src/*/dkms.conf
-Target = usr/lib/modules/*/vmlinuz
-Target = usr/lib/modules/*/extramodules/*
-
-[Trigger]
-Type = Path
 Operation = Upgrade
 Target = usr/bin/booster-um
 
 [Trigger]
 Type = Path
+Operation = Install
+Operation = Upgrade
+Target = usr/bin/booster
+Target = usr/lib/booster/*
+Target = usr/lib/modules/*/vmlinuz
+
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
 Operation = Remove
 Target = boot/*-ucode.img
 Target = usr/lib/firmware/*

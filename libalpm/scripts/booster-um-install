@@ -15,11 +15,11 @@ add_uname() {
 
 while read -r line; do
   case "$line" in
-    usr/src/*/dkms.conf | usr/lib/firmware/*)
+    usr/bin/booster | usr/bin/booster-um | usr/bin/ukify)
       sign_all=1
       break
       ;;
-    usr/bin/booster | usr/bin/booster-um | usr/lib/booster/*)
+    usr/lib/booster/* | usr/lib/firmware/* | usr/src/*/dkms.conf)
       sign_all=1
       break
       ;;
@@ -34,19 +34,13 @@ while read -r line; do
 done
 
 # Generate and sign UKI files for all kernels
-if [ "${sign_all}" -eq "1" ]; then
-  booster-um -G
-  exit
-fi
+if [[ $sign_all -eq 1 ]]; then booster-um -G; exit; fi
 
 # Sbctl hook should sign the UKI file if it already exists in database
 export ALWAYS_SIGN=1
 
 # Generate UKI files for all kernels
-if [ "${all}" -eq "1" ]; then
-  booster-um -G
-  exit
-fi
+if [[ $all -eq 1 ]]; then booster-um -G; exit; fi
 
 for uname in "${!unames[@]}"; do
   kernel_dir="/usr/lib/modules/${uname}"

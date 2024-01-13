@@ -7,8 +7,10 @@ Target = usr/bin/booster-um
 Type = Path
 Operation = Install
 Operation = Upgrade
+Target = usr/bin/ukify
 Target = usr/bin/booster
 Target = usr/lib/booster/*
+Target = usr/lib/**/efi/*.efi*
 Target = usr/lib/modules/*/vmlinuz
 
 [Trigger]

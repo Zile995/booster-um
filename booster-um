@@ -33,12 +33,12 @@ main() {
       # Always regenerate initramfs
       # Generate UKI file for specified kernel package name
       shift
-      _generate_kernel_uki "$1"
+      _generate_kernel_uki "$@"
       ;;
     -r)
       # Remove UKI file and other leftovers for specified kernel package name
       shift
-      _remove_uki "$1"
+      _remove_uki "$@"
       ;;
     -p)
       # This argument is used in libalpm remove hook

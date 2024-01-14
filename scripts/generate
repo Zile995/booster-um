@@ -97,17 +97,20 @@ _generate_uki() {
 
 # Generates UKI file for specified kernel package name
 _generate_kernel_uki() {
-  local pkgbase="$1"
-  _check_pkgbase "$pkgbase"
+  local -a input_pkgbases
+  readarray -t input_pkgbases < <(printf '%s\n' "$@" | sort -u)
+  for pkgbase in "${input_pkgbases[@]}"; do
+    _check_pkgbase "$pkgbase"
 
-  # Get the uname
-  local uname="${kernels[$pkgbase]}"
+    # Get the uname
+    local uname="${kernels[$pkgbase]}"
 
-  # Generate initramfs
-  _generate_initramfs "$pkgbase" "$uname" || return
+    # Generate initramfs
+    _generate_initramfs "$pkgbase" "$uname" || return
 
-  # Generate and sign UKI file
-  _generate_uki "$pkgbase" "$uname"
+    # Generate and sign UKI file
+    _generate_uki "$pkgbase" "$uname"
+  done
 }
 
 # Generates UKI files for all installed kernels

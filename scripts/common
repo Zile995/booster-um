@@ -10,25 +10,21 @@ B='\033[1;34m' # Blue
 Y='\033[1;33m' # Yellow
 NC='\033[0m'   # No color
 
+# Associative array with the kernel package name as the key and uname as the value
+declare -A kernels
+
+# An array of sorted pkgbases
+declare -a sorted_pkgbases=()
+
 # Checks if specified command exists
 _command_exists() {
   command -v -- "$1" > /dev/null 2>&1
 }
 
-# Gets the index for the specified element in array
-_get_array_index() {
-  local index=0
-  local -n array="$1"
-  local search="$2"
-  index="$(printf "%s\n" "${array[@]}" | grep -n "^${search}$" | sed "s/:${search}//")"
-  echo "$((index-1))"
-}
-
 # Checks if the pkgbase exists
 _pkgbase_exists() {
   local pkgbase="$1"
-  printf '%s\0' "${pkgbases[@]}" | grep -Fqxz -- "$pkgbase"
-  return $?
+  [[ -v kernels[$pkgbase] ]]
 }
 
 # Checks if the package name is actually a kernel package name
@@ -41,18 +37,27 @@ _check_pkgbase() {
 
 # Find out all package names of installed kernels
 _find_kernels() {
-  kernels=()
-  readarray -t -O "${#kernels[@]}" kernels < <(find /usr/lib/modules \
+  local pkgbase uname
+  local -a kernel_paths=()
+
+  # Find all kernel paths
+  # Example: /usr/lib/modules/6.6.10-arch1-1
+  readarray -t -O "${#kernel_paths[@]}" kernel_paths < <(find /usr/lib/modules \
     -maxdepth 1 ! -path '*/\.*' -type d ! -name 'modules' \
     -exec sh -c 'for path; do if pacman -Qqo -- "$path/pkgbase" > /dev/null 2>&1; then echo $path; fi; done' _ {} +)
 
-  # Generate array of valid kernel package names
-  readarray -t pkgbases < <(printf '%s/pkgbase\n' "${kernels[@]}" | xargs -I {} cat {} 2>/dev/null)
-}
+  # Fill the kernels array
+  for kernel_path in "${kernel_paths[@]}"; do
+    # Save the key and values to the associative array
+    read -r pkgbase < "${kernel_path}/pkgbase"
+    uname="${kernel_path##/usr/lib/modules/}"
+    kernels["$pkgbase"]="$uname"
+  done
 
-# Returns the uname for the specified kernel dir
-_get_kernel_uname() {
-  local kernel="$1"
-  uname="${kernel##/usr/lib/modules/}"
-  echo "$uname"
+  # Do not sort pkgbases if the kernels array is empty or has only one item
+  [[ ${#kernels[@]} -eq 0 ]] && return
+  [[ ${#kernels[@]} -eq 1 ]] && sorted_pkgbases=("${!kernels[@]}") && return
+
+  # Sort the pkgbase keys
+  readarray -t sorted_pkgbases < <(printf '%s\n' "${!kernels[@]}" | sort -n)
 }

@@ -100,10 +100,8 @@ _generate_kernel_uki() {
   local pkgbase="$1"
   _check_pkgbase "$pkgbase"
 
-  # Get the index of pkgbase
-  index="$(_get_array_index pkgbases $pkgbase)"
-  local kernel="${kernels[$index]}"
-  local uname="$(_get_kernel_uname $kernel)"
+  # Get the uname
+  local uname="${kernels[$pkgbase]}"
 
   # Generate initramfs
   _generate_initramfs "$pkgbase" "$uname" || return
@@ -114,24 +112,17 @@ _generate_kernel_uki() {
 
 # Generates UKI files for all installed kernels
 _generate_all_uki() {
-  local uname
-  for kernel in "${kernels[@]}"; do
-    read -r pkgbase < "${kernel}/pkgbase"
-    uname="$(_get_kernel_uname $kernel)"
-
+  for pkgbase in "${sorted_pkgbases[@]}"; do
     # Generate and sign UKI file
-    _generate_uki "$pkgbase" "$uname"
+    _generate_uki "$pkgbase" "${kernels[$pkgbase]}"
   done
 }
 
 # Generates initramfs and fallback initramfs
 _regenerate_images() {
   local pids=()
-  local pkgbase
-  for kernel in "${kernels[@]}"; do
-    read -r pkgbase < "${kernel}/pkgbase"
-    uname="$(_get_kernel_uname $kernel)"
-    _generate_initramfs "$pkgbase" "$uname" & pids+=( $! )
+  for pkgbase in "${sorted_pkgbases[@]}"; do
+    _generate_initramfs "$pkgbase" "${kernels[$pkgbase]}" & pids+=( $! )
   done
 
   # Wait for all background jobs

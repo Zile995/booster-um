@@ -90,7 +90,7 @@ _remove_leftovers() {
 # Removes all known UKI files from esp/EFI/Linux dir
 _remove_all_uki() {
   echo -e "${Y}::${NC} Removing ${Y}all known UKI files${NC}..."
-  for pkgbase in "${pkgbases[@]}"; do
+  for pkgbase in "${sorted_pkgbases[@]}"; do
     # Remove the UKI file, vmlinuz and initramfs
     _remove_uki "$pkgbase"
   done

@@ -90,7 +90,7 @@ _remove_leftovers() {
 # Removes all known UKI files from esp/EFI/Linux dir
 _remove_all_uki() {
   echo -e "${Y}::${NC} Removing ${Y}all known UKI files${NC}..."
-  for pkgbase in "${pkgbases[@]}"; do
+  for pkgbase in "${sorted_pkgbases[@]}"; do
     # Remove the UKI file, vmlinuz and initramfs
     _remove_uki "$pkgbase"
   done
@@ -127,32 +127,36 @@ _cleanup() {
   shopt -u nullglob
 }
 
-# Removes UKI file for specified kernel
+# Removes UKI file for specified kernels
 _remove_uki() {
-  local pkgbase="$1"
-  _check_pkgbase "$pkgbase"
+  local -a input_pkgbases
+  readarray -t input_pkgbases < <(printf '%s\n' "$@" | sort -u)
+  for pkgbase in "${input_pkgbases[@]}"; do
+    # Check the pkgbase
+    _check_pkgbase "$pkgbase"
 
-  # Remove leftovers from /boot dir 
-  _remove_boot_leftovers "$pkgbase"
+    # Remove leftovers from /boot dir 
+    _remove_boot_leftovers "$pkgbase"
 
-  # Store all UKI files in array
-  readarray -t uki_files < <(find "${EFI_DIR}" \
-    -type f \
-    -name "arch-${pkgbase}.efi" -o \
-    -name "arch-${pkgbase}-fallback.efi" 2> /dev/null)
+    # Store all UKI files in array
+    readarray -t uki_files < <(find "${EFI_DIR}" \
+      -type f \
+      -name "arch-${pkgbase}.efi" -o \
+      -name "arch-${pkgbase}-fallback.efi" 2> /dev/null)
 
-  for uki in "${uki_files[@]}"; do
-    # Remove the UKI file from sbctl database
-    echo -e "${Y}==>${NC} Removing ${Y}${uki}${NC} file..."
-    _remove_from_db "$uki"
+    for uki in "${uki_files[@]}"; do
+      # Remove the UKI file from sbctl database
+      echo -e "${Y}==>${NC} Removing ${Y}${uki}${NC} file..."
+      _remove_from_db "$uki"
 
-    # Remove the UKI file
-    rm -f "$uki"
+      # Remove the UKI file
+      rm -f "$uki"
 
-    # Remove the cmdline file
-    rm -f "/etc/kernel/${pkgbase}.cmdline"
+      # Remove the cmdline file
+      rm -f "/etc/kernel/${pkgbase}.cmdline"
 
-    # Remove the EFI entry
-    if [[ $REMOVE_EFI -eq 0 ]]; then _remove_efi_entry "$uki"; fi
+      # Remove the EFI entry
+      if [[ $REMOVE_EFI -eq 0 ]]; then _remove_efi_entry "$uki"; fi
+    done
   done
 }

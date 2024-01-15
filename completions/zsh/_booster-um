@@ -32,7 +32,6 @@ _init() {
 }
 
 _kernel_comp() {
-  (( CURRENT == 2 )) &&
   compadd $(find /usr/lib/modules/* \
     -mindepth 1 -maxdepth 1 \
     ! -path '*/\.*' ! -path '*/build' -type f -name 'pkgbase' \

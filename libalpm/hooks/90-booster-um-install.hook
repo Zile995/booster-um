@@ -10,7 +10,7 @@ Operation = Upgrade
 Target = usr/bin/ukify
 Target = usr/bin/booster
 Target = usr/lib/booster/*
-Target = usr/lib/**/efi/*.efi*
+Target = usr/lib/**/efi/*.stub
 Target = usr/lib/modules/*/vmlinuz
 
 [Trigger]

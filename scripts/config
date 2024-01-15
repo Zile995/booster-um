@@ -102,7 +102,7 @@ _is_bmp() {
 # Sets the initramfs config for all kernels
 _set_initramfs_config() {
   local -a value=()
-  for pkgbase in "${pkgbases[@]}"; do
+  for pkgbase in "${sorted_pkgbases[@]}"; do
     readarray value < <(yq ".initramfs_config.${pkgbase}[]" "$CONFIG");
     if [[ ${#value[@]} -eq 1 && "${value[@]}" =~ "fallback" ]] && ! _should_generate_fallback; then
       value=(default)

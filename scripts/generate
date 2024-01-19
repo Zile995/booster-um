@@ -18,8 +18,8 @@ _generate_uki() {
 
   # booster initramfs
   local -a booster_inits=()
-  [[ "${initramfs_config[$pkgbase]}" =~ "default" ]] && booster_inits+=("/boot/booster-${pkgbase}.img")
-  if _should_generate_fallback && [[ "${initramfs_config[$pkgbase]}" =~ "fallback" ]]; then
+  if _has_default_initramfs "$pkgbase"; then booster_inits+=("/boot/booster-${pkgbase}.img"); fi
+  if _should_generate_fallback && _has_fallback_initramfs "$pkgbase"; then
     booster_inits+=("/boot/booster-${pkgbase}-fallback.img")
   fi
 
@@ -147,7 +147,7 @@ _generate_initramfs() {
   # Set the booster initramfs file path
   local initramfs="/boot/booster-${pkgbase}.img"
 
-  if [[ "${initramfs_config[$pkgbase]}" =~ "default" ]]; then
+  if _has_default_initramfs "$pkgbase"; then
     # Generate initramfs
     if ! booster build --force --kernel-version "$uname" "$initramfs"; then
       echo -e "${R}==>${NC} Unable to generate initramfs for ${R}${pkgbase}${NC}..."
@@ -184,13 +184,10 @@ _install_vmlinuz() {
 
 # Generates fallback initramfs
 _generate_fallback_initramfs() {
-  if ! _should_generate_fallback; then return; fi
+  local pkgbase="$1"
+  if ! _should_generate_fallback || ! _has_fallback_initramfs "$pkgbase"; then return; fi
 
-  local uname pkgbase fallback_initramfs
-  pkgbase="$1"
-
-  [[ "${initramfs_config[$pkgbase]}" =~ "fallback" ]] || return 0
-
+  local uname fallback_initramfs
   uname="$2"
   fallback_initramfs="/boot/booster-${pkgbase}-fallback.img"
 
@@ -202,7 +199,7 @@ _generate_fallback_initramfs() {
 # Regenerates UKI files for all installed kernels
 _regenerate_all() {
   [[ ${#kernels[@]} -eq 0 ]] && {
-    echo -e "${R}There are no kernels. Please install at least one kernel.${NC}"
+    echo -e "${R}==>${W} Unable to regenerate all UKI files, ${R}there are no kernels${NC}${W}. Please install at least one kernel.${NC}"
     exit
   }
   echo -e "${B}::${W} Generating initramfs for all installed kernels...${NC}"

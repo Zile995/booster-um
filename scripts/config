@@ -44,43 +44,61 @@ _is_universal() {
 
 # Checks if the booster-um should always generate a fallback UKI
 _should_generate_fallback() {
-  [[ $CONFIG_VALID -eq 1 ]] && return 1
-  if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' && ! _is_universal; then return; fi
-  false
+  [[ -n $generate_fallback ]] && return $generate_fallback
+  [[ $CONFIG_VALID -eq 1 ]] && generate_fallback=1 && return 1
+  if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' && ! _is_universal; then
+    generate_fallback=0 && return
+  fi
+  generate_fallback=1; false
 }
 
 # Checks if the booster-um should always sign generated UKI
 _should_sign_uki() {
-  [[ $CONFIG_VALID -eq 1 ]] && return
-  if ! yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
-  false
+  [[ -n $sign_uki ]] && return $sign_uki
+  [[ $CONFIG_VALID -eq 1 ]] && sign_uki=0 && return
+  if ! yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'; then
+   sign_uki=0 && return
+  fi
+  sign_uki=1; false
 }
 
 # Checks if the booster-um should remove leftovers (vmlinuz and initramfs)
 _should_remove_leftovers() {
-  [[ $CONFIG_VALID -eq 1 ]] && return
-  if ! yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
-  false
+  [[ -n $remove_leftovers ]] && return $remove_leftovers
+  [[ $CONFIG_VALID -eq 1 ]] && remove_leftovers=0 && return
+  if ! yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'; then
+    remove_leftovers=0 && return
+  fi
+  remove_leftovers=1; false
 }
 
 # Checks if the booster-um should create EFI entry
 _should_create_efi_entry() {
-  [[ $CONFIG_VALID -eq 1 ]] && return 1
-  if yq '.efistub == true' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
-  false
+  [[ -n $create_efi_entry ]] && return $create_efi_entry
+  [[ $CONFIG_VALID -eq 1 ]] && create_efi_entry=1 && return 1
+  if yq '.efistub == true' "$CONFIG" | grep -Fqwx -- 'true'; then
+    create_efi_entry=0 && return
+  fi
+  create_efi_entry=1; false
 }
 
 # Checks if the booster-um should create EFI entry
 _should_preserve_boot_order() {
-  [[ $CONFIG_VALID -eq 1 ]] && return
-  if ! yq '.efistub_config.preserve_boot_order == false' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
-  false
+  [[ -n $preserve_boot_order ]] && return $preserve_boot_order
+  [[ $CONFIG_VALID -eq 1 ]] && preserve_boot_order=0 && return
+  if ! yq '.efistub_config.preserve_boot_order == false' "$CONFIG" | grep -Fqwx -- 'true'; then
+    preserve_boot_order=0 && return
+  fi
+  preserve_boot_order=1; false
 }
 
 _cmdline_per_kernel() {
-  [[ $CONFIG_VALID -eq 1 ]] && return 1
-  if yq '.cmdline_per_kernel == true' "$CONFIG" | grep -Fqwx -- 'true'; then return; fi
-  false
+  [[ -n $cmdline_per_kernel ]] && return $cmdline_per_kernel
+  [[ $CONFIG_VALID -eq 1 ]] && cmdline_per_kernel=1 && return 1
+  if yq '.cmdline_per_kernel == true' "$CONFIG" | grep -Fqwx -- 'true'; then
+    cmdline_per_kernel=0 && return
+  fi
+  cmdline_per_kernel=1; false
 }
 
 # Returns the sbsign property value
@@ -99,15 +117,42 @@ _is_bmp() {
   false
 }
 
+_has_default_initramfs() {
+  local key="$1"
+  [[ "${initramfs_config[$key]}" =~ "default" ]]
+}
+
+_has_fallback_initramfs() {
+  local key="$1"
+  [[ "${initramfs_config[$key]}" =~ "fallback" ]]
+}
+
+# Get the default initramfs types
+_get_default_initramfs_types() {
+  local -n initramfs_types="$1"
+  readarray initramfs_types < <(yq ".initramfs_config.default_types[]" "$CONFIG");
+  if [[ ! "${initramfs_types[*]}" =~ "default" && "${initramfs_types[*]}" =~ "fallback" ]] && ! _should_generate_fallback; then
+    initramfs_types=(default)
+  fi
+  [[ ${#initramfs_types[@]} -eq 0 ]] && initramfs_types=(default fallback) || :
+}
+
 # Sets the initramfs config for all kernels
 _set_initramfs_config() {
   local -a value=()
   for pkgbase in "${sorted_pkgbases[@]}"; do
+    # Get the initramfs type array for specified kernel pkgbase
     readarray value < <(yq ".initramfs_config.${pkgbase}[]" "$CONFIG");
-    if [[ ${#value[@]} -eq 1 && "${value[@]}" =~ "fallback" ]] && ! _should_generate_fallback; then
+
+    # If fallback images should not be generated and there is only fallback type, create the default image
+    if [[ ! "${value[*]}" =~ "default" && "${value[*]}" =~ "fallback" ]] && ! _should_generate_fallback; then
       value=(default)
     fi
-    [[ ${#value[@]} -eq 0 ]] && value=(default fallback)
+
+    # If the kernel is not specified, use the value for other kernels
+    [[ ${#value[@]} -eq 0 ]] && _get_default_initramfs_types value
+
+    # Save the initramfs config for specified kernel pkgbase
     initramfs_config[$pkgbase]="${value[@]}"
   done
 }

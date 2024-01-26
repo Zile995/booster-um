@@ -82,6 +82,13 @@ _should_create_efi_entry() {
   create_efi_entry=1; false
 }
 
+# Get the default EFI entry
+_get_default_entry() {
+  local value="$(yq ".efistub_config.default_entry" "$CONFIG")"
+  [[ $value == null ]] && return
+  echo "$value"
+}
+
 # Checks if the booster-um should create EFI entry
 _should_preserve_boot_order() {
   [[ -n $preserve_boot_order ]] && return $preserve_boot_order

@@ -15,6 +15,9 @@ declare -g ESP_PARTUUID
 # EFI System Partition mount point. Examples: /boot, /efi, /boot/efi
 declare -g ESP_MOUNT
 
+# Boot order
+declare -a boot_order
+
 # Sets EFI dir path
 _set_efi_path() {
   local esp_path boot_path
@@ -23,7 +26,7 @@ _set_efi_path() {
 
   ESP_MOUNT="$esp_path"
 
-  if [ "$esp_path" != "$boot_path" ]; then
+  if [[ "$esp_path" != "$boot_path" ]]; then
     local boot_partition part_guid xbootldr_guid
     # XBOOTLDR GUID
     xbootldr_guid="bc13c2ff-59e6-4262-a352-b275fd6f7172"
@@ -41,12 +44,12 @@ _set_efi_path() {
     fi
   fi
 
+  # Set the EFI dir where the UKI files will be saved
   EFI_DIR="${ESP_MOUNT}/EFI/Linux"
 
-  if [[ -z $ESP ]]; then
-    ESP="$(findmnt --real -nreo source "${ESP_MOUNT}")"
-  fi
+  [[ -z $ESP ]] && ESP="$(findmnt --real -nreo source "${ESP_MOUNT}")"
 
+  # Set the ESP UUID
   ESP_PARTUUID="$(partx -g -o UUID "${ESP}")"
 
   # Trigger any potential automounts
@@ -57,18 +60,8 @@ _set_efi_path() {
 _efi_entry_exists() {
   local loader_path esp_partuuid
   loader_path="$1"
-  efibootmgr | grep -w "$ESP_PARTUUID" | grep -Fwq -e "${loader_path}" -e "${loader_path^^}"
-}
-
-# Extracts the pkgbase from known UKI file path
-_get_pkgbase_from_path() {
-  local uki pkgbase
-  uki="$1"
-
-  # Extract pkgbase from UKI file path
-  pkgbase="${uki##*arch-}"
-  pkgbase="${pkgbase%%.efi}"
-  echo "$pkgbase"
+  efibootmgr | grep -w "$ESP_PARTUUID" | \
+  grep -Fwq -e "${loader_path}" -e "${loader_path^^}"
 }
 
 # Formats the efi path to be readable by efibootmgr
@@ -112,21 +105,21 @@ _get_label() {
   echo "$label"
 }
 
-# Preserves the old boot order
-_preserve_boot_order() {
-  if ! _should_preserve_boot_order; then return; fi
+# Checks if the default entry should be readded with correct boot index
+_should_readd_default_entry() {
+  local index="$1"
+  local loader_path="$2"
 
-  # Get the boot order list
-  readarray -d ',' boot_order < <(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
-
-  # Do not change the boot order if there is only one entry or no entrties
-  if [[ ${#boot_order[@]} -le 1 ]]; then return; fi
-
-  # Restore the old boot order without the newly added entry
-  old_boot_order="$(printf "%s" "${boot_order[@]:1}")"
-
-  # And add the newly added entry to the end of the old boot order list
-  efibootmgr -o "$old_boot_order,${boot_order[0]%%,}" -q
+  local -a boot_nums
+  readarray -t boot_nums < <(efibootmgr | \
+    grep -w "$ESP_PARTUUID" | \
+    grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
+    awk '{ print $1 }' | \
+    sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//' | \
+    uniq -u)
+  
+  # Check if the default entry is not first in boot order
+  [[ ! "${boot_nums[*]}" =~ "${boot_order[$index]}" ]]
 }
 
 # Adds the EFI entry
@@ -134,17 +127,48 @@ _create_efi_entry() {
   # Return if efibootmgr doesn't exist
   if ! _command_exists efibootmgr || ! _should_create_efi_entry; then return; fi
 
-  local uki loader_path pkgbase
+  local index=0
+  local uki pkgbase loader_path default_entry
   uki="$1"
+  pkgbase="$2"
+
+  # Get current boot order
+  readarray -td, boot_order < <(efibootmgr | \
+    grep -w "BootOrder" | \
+    sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
 
   # Set loader path with backslashes
   loader_path="$(_get_loader_path "$uki")"
 
-  # Return if the entry exists
+  # Get default entry
+  local default_entry="$(_get_default_entry)"
+
+  # If the default entry exists and is not default, remove it 
+  if [[ $default_entry == "$pkgbase" ]]; then
+    if [[ ! $loader_path =~ "${pkgbase}.efi" ]] && \
+      _has_default_initramfs "$pkgbase"; then index=1; fi
+    if _should_readd_default_entry "$index" "$loader_path"; then
+      # Remove old efi entry
+      _remove_efi_entry "$uki"
+    fi
+  elif _should_preserve_boot_order; then
+    # Preserve old boot order
+    index="${#boot_order[@]}"
+  elif [[ -n $default_entry ]] && ! _should_preserve_boot_order; then
+    [[ ${#boot_order[@]} -le 1 ]] && index=0 || {
+      # If preserve_boot_order is disabled and default_entry is set,
+      # add new EFI entry to the second or third position
+      if _has_fallback_initramfs "$default_entry" && \
+        _should_generate_fallback; then index=2; else index=1;
+      fi
+    }
+  fi
+
+  # If entry exists, do not create it
   if _efi_entry_exists "$loader_path"; then return; fi
 
-  # Extract pkgbase from UKI file path
-  pkgbase="$(_get_pkgbase_from_path "$uki")"
+  # If UKI file is fallback, append the -fallback string to the pkgbase name
+  [[ $uki =~ "$pkgbase-fallback.efi" ]] && pkgbase="${pkgbase}-fallback"
 
   local disk esp esp_number label
   # Get Efi System Partition. Example: /dev/nvme0n1p1
@@ -164,14 +188,12 @@ _create_efi_entry() {
 
   # Add the EFI entry
   efibootmgr --create \
-    --label "${label}" \
     --disk "${disk}" \
     --part "${esp_number}" \
+    --index "${index:-0}" \
+    --label "${label}" \
     --loader "${loader_path^^}" \
     --unicode -q
-
-  # Preserve old boot order
-  _preserve_boot_order
 }
 
 # Removes the EFI entry
@@ -187,11 +209,13 @@ _remove_efi_entry() {
 
   # Find all known labels
   readarray -t labels < <(efibootmgr | \
+    grep -w "$ESP_PARTUUID" | \
     grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
     sed 's/.*\*[[:blank:]]\(.*\)[[:blank:]]\(.*\)/\1/')
 
   # Find all known efibootmgr boot numbers for the specified UKI
   readarray -t boot_nums < <(efibootmgr | \
+    grep -w "$ESP_PARTUUID" | \
     grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
     awk '{ print $1 }' | \
     sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
@@ -222,12 +246,14 @@ _remove_orphaned_efi_entries() {
     if ! _loader_file_exists "$loader_path"; then
       # Get the boot number
       readarray -t boot_nums < <(efibootmgr | \
+        grep -w "$ESP_PARTUUID" | \
         grep -Fw "$loader_path" | \
         awk '{ print $1 }' | \
         sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
 
       # Get the labels
       readarray -t labels < <(efibootmgr | \
+        grep -w "$ESP_PARTUUID" | \
         grep -Fw "$loader_path" | \
         sed 's/.*\*[[:blank:]]\(.*\)[[:blank:]]\(.*\)/\1/')
 

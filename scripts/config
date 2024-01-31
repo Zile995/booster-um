@@ -82,6 +82,13 @@ _should_create_efi_entry() {
   create_efi_entry=1; false
 }
 
+# Get the default EFI entry
+_get_default_entry() {
+  local value="$(yq ".efistub_config.default_entry" "$CONFIG")"
+  [[ $value == null ]] && return
+  echo "$value"
+}
+
 # Checks if the booster-um should create EFI entry
 _should_preserve_boot_order() {
   [[ -n $preserve_boot_order ]] && return $preserve_boot_order
@@ -117,17 +124,19 @@ _is_bmp() {
   false
 }
 
+# Checks if pkgbase has default initramfs type
 _has_default_initramfs() {
   local key="$1"
   [[ "${initramfs_config[$key]}" =~ "default" ]]
 }
 
+# Checks if pkgbase has fallback initramfs type
 _has_fallback_initramfs() {
   local key="$1"
   [[ "${initramfs_config[$key]}" =~ "fallback" ]]
 }
 
-# Get the default initramfs types
+# Gets the default initramfs types
 _get_default_initramfs_types() {
   local -n initramfs_types="$1"
   readarray initramfs_types < <(yq ".initramfs_config.default_types[]" "$CONFIG");

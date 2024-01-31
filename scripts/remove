@@ -48,14 +48,14 @@ _remove_other_leftovers() {
     rm -f "$fallback_uki" && local fallback_removed=1
   fi
 
-  if [[ ! "${initramfs_config[$pkgbase]}" =~ "default" && -f $uki ]]; then
+  if ! _has_default_initramfs "$pkgbase" && [[ -f $uki ]]; then
     _remove_from_db "$uki"
     _remove_efi_entry "$uki"
     echo -e "${Y}==>${NC} Removing ${Y}${uki}${NC} file..."
     rm -f "$uki" && local default_removed=1
   fi
 
-  if [[ ! "${initramfs_config[$pkgbase]}" =~ "fallback" && -f $fallback_uki && -z $fallback_removed ]]; then
+  if ! _has_fallback_initramfs "$pkgbase" && [[ -f $fallback_uki && -z $fallback_removed ]]; then
     _remove_from_db "$fallback_uki"
     _remove_efi_entry "$fallback_uki"
     echo -e "${Y}==>${NC} Removing ${Y}${fallback_uki}${NC} file..."

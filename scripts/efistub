@@ -105,27 +105,10 @@ _get_label() {
   echo "$label"
 }
 
-# Preserves the old boot order
-_preserve_boot_order() {
-  if ! _should_preserve_boot_order; then return; fi
-
-  # Set new boot order
-  local -a boot_order
-  readarray -d ',' boot_order < <(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
-
-  # Do not change the boot order if there is only one entry or no entrties
-  if [[ ${#boot_order[@]} -le 1 ]]; then return; fi
-
-  # Restore the old boot order without the newly added entry
-  old_boot_order="$(printf "%s" "${boot_order[@]:1}")"
-
-  # And add the newly added entry to the end of the old boot order list
-  efibootmgr -o "$old_boot_order,${boot_order[0]%%,}" -q
-}
-
 # Checks if the default entry should be readded with correct boot index
 _should_readd_default_entry() {
-  local loader_path="$1"
+  local index="$1"
+  local loader_path="$2"
 
   local -a boot_nums
   readarray -t boot_nums < <(efibootmgr | \
@@ -134,12 +117,9 @@ _should_readd_default_entry() {
     awk '{ print $1 }' | \
     sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//' | \
     uniq -u)
-
-  local -a boot_order
-  readarray -td, boot_order < <(efibootmgr | grep -w "BootOrder" | sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
   
   # Check if the default entry is not first in boot order
-  [[ ! "${boot_nums[*]}" =~ "${boot_order[0]}" ]]
+  [[ ! "${boot_nums[*]}" =~ "${boot_order[$index]}" ]]
 }
 
 # Adds the EFI entry
@@ -147,9 +127,15 @@ _create_efi_entry() {
   # Return if efibootmgr doesn't exist
   if ! _command_exists efibootmgr || ! _should_create_efi_entry; then return; fi
 
-  local uki pkgbase loader_path default_entry index
+  local index=0
+  local uki pkgbase loader_path default_entry
   uki="$1"
   pkgbase="$2"
+
+  # Get current boot order
+  readarray -td, boot_order < <(efibootmgr | \
+    grep -w "BootOrder" | \
+    sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
 
   # Set loader path with backslashes
   loader_path="$(_get_loader_path "$uki")"
@@ -159,18 +145,29 @@ _create_efi_entry() {
 
   # If the default entry exists and is not default, remove it 
   if [[ $default_entry == "$pkgbase" ]]; then
-    [[ $loader_path =~ "${pkgbase}.efi" ]] && index=0 || {
-      if ! _has_default_initramfs "$pkgbase"; then index=0; else index=1; fi
-    }
-    if _should_readd_default_entry "$loader_path"; then
+    if [[ ! $loader_path =~ "${pkgbase}.efi" ]] && \
+      _has_default_initramfs "$pkgbase"; then index=1; fi
+    if _should_readd_default_entry "$index" "$loader_path"; then
+      # Remove old efi entry
       _remove_efi_entry "$uki"
     fi
+  elif _should_preserve_boot_order; then
+    # Preserve old boot order
+    index="${#boot_order[@]}"
+  elif [[ -n $default_entry ]] && ! _should_preserve_boot_order; then
+    [[ ${#boot_order[@]} -le 1 ]] && index=0 || {
+      # If preserve_boot_order is disabled and default_entry is set,
+      # add new EFI entry to the second or third position
+      if _has_fallback_initramfs "$default_entry" && \
+        _should_generate_fallback; then index=2; else index=1;
+      fi
+    }
   fi
 
   # If entry exists, do not create it
   if _efi_entry_exists "$loader_path"; then return; fi
 
-  # If UKI file is fallback, append the -fallback string to the pkgbase
+  # If UKI file is fallback, append the -fallback string to the pkgbase name
   [[ $uki =~ "$pkgbase-fallback.efi" ]] && pkgbase="${pkgbase}-fallback"
 
   local disk esp esp_number label
@@ -198,8 +195,7 @@ _create_efi_entry() {
     --loader "${loader_path^^}" \
     --unicode -q
 
-  # Preserve old boot order
-  [[ -z $index ]] && _preserve_boot_order || :
+    unset boot_order
 }
 
 # Removes the EFI entry

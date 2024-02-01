@@ -143,7 +143,7 @@ _create_efi_entry() {
   # Get default entry
   local default_entry="$(_get_default_entry)"
 
-  # If the default entry exists and is not default, remove it 
+  # If the default entry exists and is not default, remove it first
   if [[ $default_entry == "$pkgbase" ]]; then
     if [[ ! $loader_path =~ "${pkgbase}.efi" ]] && \
       _has_default_initramfs "$pkgbase"; then index=1; fi
@@ -151,17 +151,14 @@ _create_efi_entry() {
       # Remove old efi entry
       _remove_efi_entry "$uki"
     fi
-  elif _should_preserve_boot_order; then
+  elif _should_append; then
     # Preserve old boot order
     index="${#boot_order[@]}"
-  elif [[ -n $default_entry ]] && ! _should_preserve_boot_order; then
-    [[ ${#boot_order[@]} -le 1 ]] && index=0 || {
-      # If preserve_boot_order is disabled and default_entry is set,
-      # add new EFI entry to the second or third position
-      if _has_fallback_initramfs "$default_entry" && \
-        _should_generate_fallback; then index=2; else index=1;
-      fi
-    }
+  elif _pkgbase_exists "$default_entry" && [[ ${#boot_order[@]} -gt 1 ]]; then
+    # If append is disabled and default_entry is specified,
+    # add new EFI entry to the second or third position
+    if _has_fallback_initramfs "$default_entry" && \
+      _should_generate_fallback; then index=2; else index=1; fi
   fi
 
   # If entry exists, do not create it

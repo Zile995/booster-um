@@ -100,7 +100,7 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
 
 * `efistub` manages EFI entries. If enabled, `booster-um` will create a new EFI entry. If it is not specified, its value is set to `false`
 * `efistub_config` node provides additional efistub configuration:
-  * `default_entry` makes sure that the EFI entry of the specified kernel is the first in the EFI boot order. After changing its value, it is enough to regenerate all images (`booster-um -G`)  
+  * `default_entry` makes sure that the EFI entry of the specified kernel is the first in the EFI boot order. If fallback UKI is generated for the specified kernel, its EFI entry will be added after the default entry. After changing its value, it is enough to regenerate all images (`booster-um -G`)  
   * `append` takes care of where new EFI entries will be added to the boot order. If enabled , **newly** created EFI entries will be added to the end of the boot order, otherwise they will be added to the beginning. If it is not specified, its value is set to `false`
 
 * `sbsign` manages UKI signing using the `sbsign` tool. If enabled, `sbsign` will be used instead of `sbctl`. After enabling this type of signing, the options in the `sbsign_config` node can be set arbitrarily. If it is not specified, its value is set to `false`

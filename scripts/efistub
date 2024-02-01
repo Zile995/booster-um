@@ -234,10 +234,20 @@ _remove_orphaned_efi_entries() {
   local search="${EFI_DIR#$ESP_MOUNT}/arch-"
   search="${search//\//\\}"
 
+  local sed_string
+  local efivar_version="$(pacman -Qi efivar | \
+    grep Version | \
+    sed 's/[^0-9]*\([0-9]\{1,\}\).*/\1/')"
+
+  [[ $efivar_version -ge 39 ]] && sed_string="s/.*)\///" ||
+    sed_string="s/.*(\(.*\))/\1/"
+
   # Get all uniqe loader paths
   readarray -t loader_paths < <(efibootmgr | \
-    grep -w "$ESP_PARTUUID" | grep -Fi "$search" | \
-    sed 's/.*(\(.*\))/\1/' | uniq -u)
+    grep -w "$ESP_PARTUUID" | \
+    grep -Fi "$search" | \
+    sed "$sed_string" | \
+    uniq -u)
 
   for loader_path in "${loader_paths[@]}"; do
     if ! _loader_file_exists "$loader_path"; then

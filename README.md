@@ -71,7 +71,7 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
  efistub: false
  efistub_config:
    default_entry: linux
-   append: true
+   append_entries: true
 
  sbsign: false
  sbsign_config:
@@ -101,7 +101,7 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
 * `efistub` manages EFI entries. If enabled, `booster-um` will create a new EFI entry. If it is not specified, its value is set to `false`
 * `efistub_config` node provides additional efistub configuration:
   * `default_entry` makes sure that the EFI entry of the specified kernel is the first in the EFI boot order. If fallback UKI is generated for the specified kernel, its EFI entry will be added after the default entry. After changing its value, it is enough to regenerate all images (`booster-um -G`)  
-  * `append` takes care of where new EFI entries will be added to the boot order. If enabled , **newly** created EFI entries will be added to the end of the boot order, otherwise they will be added to the beginning. If it is not specified, its value is set to `false`
+  * `append_entries` takes care of where new EFI entries will be added to the boot order. If enabled , **newly** created EFI entries will be added to the end of the boot order, otherwise they will be added to the beginning. If it is not specified, its value is set to `true`
 
 * `sbsign` manages UKI signing using the `sbsign` tool. If enabled, `sbsign` will be used instead of `sbctl`. After enabling this type of signing, the options in the `sbsign_config` node can be set arbitrarily. If it is not specified, its value is set to `false`
 * `sbsign_config` node provides `sbsign` configuration:
@@ -117,7 +117,7 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
   root=UUID=0a3407de-014b-458b-b5c1-848e92a327a3 rw quiet splash
   ```
 * Edit the `/etc/booster-um.yaml` config if needed (the default configuration will be used if the config file is empty):
-  * If you use the EFISTUB booting, add the `efistub: true` to the config
+  * If you use the EFISTUB booting, add the `efistub: true` to the config. If you want to set kernel to always boot into by default, specify the kernel package name in `append_entries`
   * If you don't have secureboot keys and `sbctl` is installed, generate them with `sbctl` before generating the UKI files. `booster-um` will by default sign the UKI files with `sbctl` tool if it is installed. If you don't like that, set the `sign_uki: false` to the config. 
   * If you want to use the manually generated keys, use the `sbsign` tools instead of the `sbctl`. Install the `sbsigntools` and set the `sbsign: true` to the config. The `sign_uki` must not be disabled and you will need to provide the appropriate key paths within the `sbsign_config` node (usually `secureboot_private_key` and `secureboot_certificate` fields	need to be configured)
   * For more information on creating secureboot keys, see the [UEFI/Secure Boot](https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secure_Boot) article

@@ -151,11 +151,11 @@ _create_efi_entry() {
       # Remove old efi entry
       _remove_efi_entry "$uki"
     fi
-  elif _should_append; then
+  elif _should_append_entries; then
     # Preserve old boot order
     index="${#boot_order[@]}"
   elif _pkgbase_exists "$default_entry" && [[ ${#boot_order[@]} -gt 1 ]]; then
-    # If append is disabled and default_entry is specified,
+    # If append_entries is disabled and default_entry is specified,
     # add new EFI entry to the second or third position
     if _has_fallback_initramfs "$default_entry" && \
       _should_generate_fallback; then index=2; else index=1; fi

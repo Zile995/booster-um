@@ -89,14 +89,14 @@ _get_default_entry() {
   echo "$value"
 }
 
-# Checks if the booster-um should append EFI entry to the boot order
-_should_append() {
-  [[ -n $append ]] && return $append
-  [[ $CONFIG_VALID -eq 1 ]] && append=0 && return
-  if ! yq '.efistub_config.append == false' "$CONFIG" | grep -Fqwx -- 'true'; then
-    append=0 && return
+# Checks if the booster-um should append EFI entries to the boot order
+_should_append_entries() {
+  [[ -n $append_entries ]] && return $append_entries
+  [[ $CONFIG_VALID -eq 1 ]] && append_entries=0 && return
+  if ! yq '.efistub_config.append_entries == false' "$CONFIG" | grep -Fqwx -- 'true'; then
+    append_entries=0 && return
   fi
-  append=1; false
+  append_entries=1; false
 }
 
 _cmdline_per_kernel() {

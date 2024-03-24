@@ -11,7 +11,8 @@ _generate_uki() {
   local CMDLINE SPLASH UNAME VMLINUZ UKI INITRD
   UNAME="$2"
 
-  echo -e "${B}==>${NC} Generating UKI for ${G}${pkgbase}${NC}..."
+  _print_divider
+  echo -e "${B}==>${NC} Generating UKI for ${G}${pkgbase} ($UNAME)${NC}..."
 
   # vmlinuz path
   VMLINUZ="/boot/vmlinuz-${pkgbase}"
@@ -25,16 +26,13 @@ _generate_uki() {
 
   # Return if required initramfs files do not exist
   if ! stat -- "${booster_inits[@]}" > /dev/null 2>&1 || [[ ! -e $VMLINUZ ]]; then
-    echo -e "${R}==>${NC} Unable to generate UKI for ${R}${pkgbase}${NC}..."
+    echo -e "${R}  ==>${NC} Unable to generate UKI for ${R}${pkgbase}${NC}..."
     return
   fi
 
   # Fix the initramfs file permissions if necessary
-  [[ ! $(stat -c %a "${booster_inits[@]}" | grep -w "600" | wc -l) -eq "${#booster_inits[@]}" ]] && \
-  chmod -f 600 -- "${booster_inits[@]}"
-
-  # cmdline file path or cmdline kernel parameters
-  CMDLINE="$(_get_cmdline $pkgbase)"
+  [[ ! $(stat -c %a "${booster_inits[@]}" | grep -w "600" | wc -l) -eq "${#booster_inits[@]}" ]] &&
+    chmod -f 600 -- "${booster_inits[@]}"
 
   # splash file
   SPLASH="$(_get_splash_path)"
@@ -43,11 +41,8 @@ _generate_uki() {
   local -a microcodes
   mapfile -d '' microcodes < <(find /boot -name '*-ucode.img' -type f -print0)
 
-  # initrd temp path
-  INITRD="$(mktemp -t 'initrd.XXXXXX')"
-
   # UKI file path, create EFI dir if it doesn't exist
-  [[ ! -e $EFI_DIR ]] && mkdir -p "$EFI_DIR"
+  [[ ! -d $EFI_DIR ]] && mkdir -p "$EFI_DIR"
   local uki_path="${EFI_DIR}/arch-${pkgbase}"
 
   local -a sign_args=()
@@ -66,13 +61,18 @@ _generate_uki() {
   fi
 
   for booster_initramfs in "${booster_inits[@]}"; do
+    # initrd temp path
+    INITRD="$(mktemp -t 'initrd.XXXXXX')"
+
     # Create one initrd
     cat -- "${microcodes[@]}" "$booster_initramfs" > "$INITRD"
 
     # Set UKI fallback path
-    if [[ $booster_initramfs =~ "$pkgbase-fallback.img" ]]; then
-      uki_path="${uki_path}-fallback"
-    fi
+    [[ $booster_initramfs =~ "$pkgbase-fallback.img" ]] && 
+      uki_path="${uki_path}-fallback" && local fallback=0
+
+    # cmdline file path or cmdline kernel parameters
+    CMDLINE="$(_get_cmdline $pkgbase "${fallback:-1}")"
 
     # Set the UKI file with .efi exstension
     UKI="${uki_path}.efi"
@@ -84,8 +84,9 @@ _generate_uki() {
       --initrd="$INITRD" \
       ${CMDLINE:+"--cmdline=$CMDLINE"} \
       ${SPLASH:+"--splash=$SPLASH"} "${sign_args[@]}" \
-      --output="$UKI" | tail -n 1 && \
-      _sign_uki "$UKI" && _create_efi_entry "$UKI" "$pkgbase" || :
+      --output="$UKI" | tail -n 1 | nl -bn -w1 &&
+      _sign_uki "$UKI" &&
+      _create_efi_entry "$UKI" "$pkgbase" || :
 
     # Remove the old initrd after creating the UKI file
     rm -f "$INITRD"
@@ -93,44 +94,47 @@ _generate_uki() {
 
   # Remove the leftovers (vmlinuz, booster initramfs and other files)
   _remove_leftovers "$pkgbase"
+
+  divider=0
 }
 
-# Generates UKI file for specified kernel package name
+# Generates UKI file for specified kernel package names
 _generate_kernel_uki() {
+  local uname
+  local -a pids
   local -a input_pkgbases
   readarray -t input_pkgbases < <(printf '%s\n' "$@" | sort -u)
+
+  # First remove all failed .booster initramfs
+  rm -f /boot/.booster-*.img*
+
   for pkgbase in "${input_pkgbases[@]}"; do
-    _check_pkgbase "$pkgbase"
+    _check_pkgbase "$pkgbase" || {
+      # Remove the invalid pkgbase from array
+      input_pkgbases=(${input_pkgbases[@]/$pkgbase})
+      continue
+    }
 
     # Get the uname
-    local uname="${kernels[$pkgbase]}"
+    uname="${kernels[$pkgbase]}"
 
-    # Generate initramfs
-    _generate_initramfs "$pkgbase" "$uname" || return
-
-    # Generate and sign UKI file
-    _generate_uki "$pkgbase" "$uname"
-  done
-}
-
-# Generates UKI files for all installed kernels
-_generate_all_uki() {
-  for pkgbase in "${sorted_pkgbases[@]}"; do
-    # Generate and sign UKI file
-    _generate_uki "$pkgbase" "${kernels[$pkgbase]}"
-  done
-}
-
-# Generates initramfs and fallback initramfs
-_regenerate_images() {
-  local pids=()
-  for pkgbase in "${sorted_pkgbases[@]}"; do
-    _generate_initramfs "$pkgbase" "${kernels[$pkgbase]}" & pids+=( $! )
+    # Generate the initramfs
+    _generate_initramfs "$pkgbase" "$uname" & pids+=( $! )
   done
 
   # Wait for all background jobs
   for pid in "${pids[@]}"; do
     wait "$pid"
+  done
+
+  _print_divider && divider=1
+
+  for pkgbase in "${input_pkgbases[@]}"; do
+    # Get the uname
+    uname="${kernels[$pkgbase]}"
+
+    # Generate and sign the UKI file
+    _generate_uki "$pkgbase" "$uname"
   done
 }
 
@@ -192,7 +196,13 @@ _generate_fallback_initramfs() {
   fallback_initramfs="/boot/booster-${pkgbase}-fallback.img"
 
   # Generate the fallback initramfs
-  booster build --force --universal --kernel-version "$uname" "$fallback_initramfs" && \
+  if ! booster build --force --universal --kernel-version "$uname" "$fallback_initramfs"; then 
+    echo -e "${R}==>${NC} Unable to generate initramfs for ${R}${pkgbase}${NC}..."
+    _remove_leftovers "$pkgbase"
+    return 1
+  fi
+
+  # Set the permission to 600 for the initramfs file
   chmod -f 600 -- "$fallback_initramfs"
 }
 
@@ -202,8 +212,17 @@ _regenerate_all() {
     echo -e "${R}==>${W} Unable to regenerate all UKI files, ${R}there are no kernels${NC}${W}. Please install at least one kernel.${NC}"
     exit
   }
-  echo -e "${B}::${W} Generating initramfs for all installed kernels...${NC}"
-  _regenerate_images || :
   echo -e "${B}::${W} Generating UKI files for all installed kernels...${NC}"
-  _generate_all_uki
+  _generate_kernel_uki "${!kernels[@]}"
+}
+
+# Generates UKI files on pacman update
+_generate_on_update() {
+  local -a sorted_pkgbases=("$@")
+
+  for pkgbase in "${sorted_pkgbases[@]}"; do
+    # Genearate UKI file for updated kernel
+    _generate_fallback_initramfs "$pkgbase" "${kernels[$pkgbase]}"
+    _generate_uki "$pkgbase" "${kernels[$pkgbase]}"
+  done
 }

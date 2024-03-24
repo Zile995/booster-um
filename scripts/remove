@@ -11,21 +11,23 @@ fi
 _remove_cmdline() {
   local pkgbase="$1"
 
-  # cmdline path
-  local cmdline_path="/etc/kernel/${pkgbase}.cmdline"
+  # cmdline paths
+  local cmdline_paths=(/etc/kernel/"${pkgbase}"{-fallback.cmdline,.cmdline})
 
-  # If the cmdline path exists, remove it
-  if [[ -e $cmdline_path ]]; then
-    echo -e "${Y}==>${NC} Removing cmdline ${Y}$cmdline_path${NC}..." >&2
-    rm -f "cmdline_path"
-  fi
+  for cmdline_path in "${cmdline_paths[@]}"; do
+    # If the cmdline path exists, remove it
+    if [[ -f $cmdline_path ]]; then
+      echo -e "${Y}->${NC} Removing cmdline ${Y}${cmdline_path}${NC}..." | nl -bn -w1
+      rm -f "$cmdline_path"
+    fi
+  done
 }
 
 # Removes the leftovers from /boot
 _remove_boot_leftovers() {
   local pkgbase="$1"
 
-  echo -e "${Y}==>${NC} Removing ${G}${pkgbase}${NC} leftovers from ${Y}/boot${NC}..."
+  echo -e "${Y}->${NC} Removing ${G}${pkgbase}${NC} leftovers from ${Y}/boot${NC}..." | nl -bn -w1
 
   # Remove leftovers from /boot dir
   rm -f /boot/.booster*
@@ -44,21 +46,21 @@ _remove_other_leftovers() {
   if ! _should_generate_fallback && [[ -f $fallback_uki ]]; then
     _remove_from_db "$fallback_uki"
     _remove_efi_entry "$fallback_uki"
-    echo -e "${Y}==>${NC} Removing ${Y}${fallback_uki}${NC} file..."
+    echo -e "${Y}->${NC} Removing ${Y}${fallback_uki}${NC} file..." | nl -bn -w1
     rm -f "$fallback_uki" && local fallback_removed=1
   fi
 
   if ! _has_default_initramfs "$pkgbase" && [[ -f $uki ]]; then
     _remove_from_db "$uki"
     _remove_efi_entry "$uki"
-    echo -e "${Y}==>${NC} Removing ${Y}${uki}${NC} file..."
+    echo -e "${Y}->${NC} Removing ${Y}${uki}${NC} file..." | nl -bn -w1
     rm -f "$uki" && local default_removed=1
   fi
 
   if ! _has_fallback_initramfs "$pkgbase" && [[ -f $fallback_uki && -z $fallback_removed ]]; then
     _remove_from_db "$fallback_uki"
     _remove_efi_entry "$fallback_uki"
-    echo -e "${Y}==>${NC} Removing ${Y}${fallback_uki}${NC} file..."
+    echo -e "${Y}->${NC} Removing ${Y}${fallback_uki}${NC} file..." | nl -bn -w1
     rm -f "$fallback_uki" && local fallback_removed=1
   fi
 
@@ -89,24 +91,26 @@ _remove_leftovers() {
 
 # Removes all known UKI files from esp/EFI/Linux dir
 _remove_all_uki() {
-  echo -e "${Y}::${NC} Removing ${Y}all known UKI files${NC}..."
-  for pkgbase in "${sorted_pkgbases[@]}"; do
-    # Remove the UKI file, vmlinuz and initramfs
-    _remove_uki "$pkgbase"
-  done
+  echo -e "${Y}::${W} Removing UKI files for all installed kernels...${NC}"
+  _print_divider
+  # Remove the UKI files, vmlinuz and initramfs for all installed kernels
+  _remove_uki "${sorted_pkgbases[@]}"
 }
 
 # Removes esp/EFI/Linux dir and all files from the sbctl database
 _cleanup() {
   shopt -s nullglob
 
-  echo -e "${Y}::${NC} Removing ${Y}all initramfs*, booster*, vmlinuz*${NC} files from ${Y}/boot${NC}..."
+  echo -e "${Y}::${W} Removing ${Y}all initramfs*, booster*, vmlinuz*${W} files from ${Y}/boot${W}...${NC}"
+  _print_divider
 
   # Remove all initramfs-*, booster-*, vmlinuz-* files
   rm -f /boot/{.initrd,initramfs,booster,vmlinuz}*
 
   # Store all EFI files in array
   local efi_files=("${EFI_DIR}"/*.efi)
+
+  echo -e "${Y}==>${NC} Removing ${Y}${EFI_DIR}${NC} dir and all its files..."
 
   for efi_file in "${efi_files[@]}"; do
     # Remove the file from sbctl database
@@ -117,11 +121,10 @@ _cleanup() {
   done
 
   # Remove esp/EFI/Linux dir
-  echo -e "${Y}==>${NC} Removing ${Y}${EFI_DIR}${NC} dir..."
   rm -rf "$EFI_DIR"
 
   # Remove *.cmdline files
-  echo -e "${Y}==>${NC} Removing all ${Y}.cmdline${NC} files from ${Y}/etc/kernel${NC}..."
+  echo -e "${Y}->${NC} Removing all ${Y}.cmdline${NC} files from ${Y}/etc/kernel${NC}..." | nl -bn -w1
   rm -f "/etc/kernel/*.cmdline"
 
   shopt -u nullglob
@@ -131,11 +134,17 @@ _cleanup() {
 _remove_uki() {
   local -a input_pkgbases
   readarray -t input_pkgbases < <(printf '%s\n' "$@" | sort -u)
+
+  divider=1
+
   for pkgbase in "${input_pkgbases[@]}"; do
     # Check the pkgbase
-    _check_pkgbase "$pkgbase"
+    _check_pkgbase "$pkgbase" || continue
 
-    # Remove leftovers from /boot dir 
+    _print_divider
+    echo -e "${Y}==>${NC} Removing UKI for ${G}${pkgbase} (${kernels[$pkgbase]})${NC}..."
+
+    # Remove leftovers from /boot dir
     _remove_boot_leftovers "$pkgbase"
 
     # Store all UKI files in array
@@ -146,17 +155,19 @@ _remove_uki() {
 
     for uki in "${uki_files[@]}"; do
       # Remove the UKI file from sbctl database
-      echo -e "${Y}==>${NC} Removing ${Y}${uki}${NC} file..."
+      echo -e "${Y}->${NC} Removing ${Y}${uki}${NC} file..." | nl -bn -w1
       _remove_from_db "$uki"
 
       # Remove the UKI file
       rm -f "$uki"
 
       # Remove the cmdline file
-      rm -f "/etc/kernel/${pkgbase}.cmdline"
+      _remove_cmdline "$pkgbase"
 
       # Remove the EFI entry
       if [[ $REMOVE_EFI -eq 0 ]]; then _remove_efi_entry "$uki"; fi
     done
+
+    divider=0
   done
 }

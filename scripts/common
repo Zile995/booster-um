@@ -16,6 +16,14 @@ declare -A kernels
 # An array of sorted pkgbases
 declare -a sorted_pkgbases=()
 
+# Control divider printing
+declare -g divider
+
+_print_divider() {
+  (( ${divider:-0} )) ||
+    echo "$(printf '%.0s-' {1..50})"
+}
+
 # Checks if specified command exists
 _command_exists() {
   command -v -- "$1" > /dev/null 2>&1
@@ -31,7 +39,7 @@ _pkgbase_exists() {
 _check_pkgbase() {
   local pkgbase="$1"
   if ! _pkgbase_exists "$pkgbase"; then
-    echo -e "${R}Invalid kernel package name.${NC}" >&2 && exit 1
+    echo -e "${R}Invalid kernel package name: ${pkgbase}${NC}" >&2 && return 1
   fi
 }
 

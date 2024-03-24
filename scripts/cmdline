@@ -5,44 +5,74 @@ set -e
 # Returns current kernel cmdline
 _get_current_cmdline() {
   local current_cmdline=/proc/cmdline
-  echo -e "${Y}==>${NC} Reusing current kernel cmdline from ${Y}$current_cmdline${NC}" >&2
+  echo -e "${Y}==>${NC} Reusing current kernel cmdline from ${Y}$current_cmdline${NC}..." >&2
   echo "$current_cmdline"
 }
 
-# Returns default kernel cmdline
+# Returns default kernel cmdline path
 _get_default_cmdline() {
-  local default_cmdline=/etc/kernel/cmdline
+  local default_cmdline
+  local fallback="$1"
+
+  # Set the default cmdline path
+  [[ $fallback -eq 1 ]] && 
+    default_cmdline=/etc/kernel/cmdline ||
+    default_cmdline="/etc/kernel/cmdline-fallback"
+
   # Create the default cmdline if it doesn't exist
-  [[ ! -e $default_cmdline ]] && touch "$default_cmdline"
+  [[ -e $default_cmdline ]] || touch "$default_cmdline"
   echo "$default_cmdline"
 }
 
 # Returns kernel cmdline string or cmdline file path
 _get_cmdline() {
-  local pkgbase default_cmdline cmdline
+  local pkgbase fallback default_cmdline cmdline
   pkgbase="$1"
+  fallback="$2"
 
-  default_cmdline="$(_get_default_cmdline)"
+  # Get the default cmdline path
+  # If the default cmdline is empty, create it and reuse current cmdline
+  default_cmdline="$(_get_default_cmdline "$fallback")"
 
   # If cmdline per kernel is enabled, create the cmdline string
   if _cmdline_per_kernel; then
     # Create the pkgbase cmdline
-    local pkgbase_cmdline="/etc/kernel/${pkgbase}.cmdline"
-    [[ ! -e $pkgbase_cmdline ]] && touch "$pkgbase_cmdline"
+    local pkgbase_cmdline
+    [[ $fallback -eq 1 ]] &&
+      pkgbase_cmdline="/etc/kernel/${pkgbase}.cmdline" ||
+      pkgbase_cmdline="/etc/kernel/${pkgbase}-fallback.cmdline"
 
-    local default_parameters pkgbase_parameters
-    read -r default_parameters < "$default_cmdline"
-    read -r pkgbase_parameters < "$pkgbase_cmdline"
+    # Create the pkgbase cmdline if it doesn't exist
+    [[ -f $pkgbase_cmdline ]] || touch "$pkgbase_cmdline"
 
     # Concatenate the default and pkgbase cmdline strings
-    cmdline="${default_parameters:+$default_parameters }${pkgbase_parameters}"
-    cmdline="${cmdline%% }"
-    [[ -z "${cmdline// }" ]] && cmdline="@$(_get_current_cmdline)"
+    if _shared_cmdline; then
+      local default_parameters pkgbase_parameters
+      read -r default_parameters < "$default_cmdline"
+      read -r pkgbase_parameters < "$pkgbase_cmdline"
+      cmdline="${default_parameters:+$default_parameters }${pkgbase_parameters}"
+      cmdline="${cmdline%% }"
+      [[ -n "${cmdline// }" ]] || {
+        echo -e "${R}==>${NC} Given cmdline is empty or has only white spaces!" >&2
+        cmdline="@$(_get_current_cmdline)"
+      }
+    else
+      # If pkgbase cmdline is empty or has only white spaces, pass the default cmdline path
+      [[ -z $(grep '[^[:space:]]' "$pkgbase_cmdline") ]] && {
+        echo -e "${R}==>${NC} ${Y}$pkgbase_cmdline${NC} is empty or has only white spaces!" >&2
+        cmdline="@$(_get_current_cmdline)"
+      } ||
+        # Or pass the pkgbase cmdline path
+        cmdline="@${pkgbase_cmdline}"
+    fi
   else
     # If default cmdline file is empty or has only white spaces, use the current cmdline
-    [[ -z $(grep '[^[:space:]]' $default_cmdline) ]] && default_cmdline="$(_get_current_cmdline)"
+    [[ -n $(grep '[^[:space:]]' $default_cmdline) ]] || {
+      echo -e "${R}==>${NC} ${Y}$default_cmdline${NC} is empty or has only white spaces!" >&2
+      default_cmdline="$(_get_current_cmdline)"
+    }
 
-    # Otherwise, pass the default cmdline @path
+    # Otherwise, pass the default cmdline path
     cmdline="@${default_cmdline}"
   fi
   echo "$cmdline"

@@ -31,6 +31,7 @@ _check_config() {
   _set_signing_tool
 }
 
+# Sets the default signing tool
 _set_signing_tool() {
   [[ $CONFIG_VALID -eq 1 ]] && return
   if _command_exists sbsign && yq '.sbsign == true' "$CONFIG" | grep -Fqwx -- 'true'; then SBSIGN=0; fi
@@ -99,6 +100,17 @@ _should_append_entries() {
   append_entries=1; false
 }
 
+# Checks if the base cmdlines should should be shared with pkgbase cmdlines
+_shared_cmdline() {
+  [[ -n $shared_cmdline ]] && return $shared_cmdline
+  [[ $CONFIG_VALID -eq 1 ]] && shared_cmdline=1 && return 1
+  if yq '.cmdline_config.shared_cmdline == true' "$CONFIG" | grep -Fqwx -- 'true'; then
+    shared_cmdline=0 && return
+  fi
+  shared_cmdline=1; false
+}
+
+# Checks if the booster-um should create cmdline per kernel
 _cmdline_per_kernel() {
   [[ -n $cmdline_per_kernel ]] && return $cmdline_per_kernel
   [[ $CONFIG_VALID -eq 1 ]] && cmdline_per_kernel=1 && return 1

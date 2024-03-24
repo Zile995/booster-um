@@ -103,17 +103,18 @@ _generate_kernel_uki() {
   local uname
   local -a pids
   local -a input_pkgbases
+  local -a valid_pkgbases=()
+
   readarray -t input_pkgbases < <(printf '%s\n' "$@" | sort -u)
 
   # First remove all failed .booster initramfs
   rm -f /boot/.booster-*.img*
 
   for pkgbase in "${input_pkgbases[@]}"; do
-    _check_pkgbase "$pkgbase" || {
-      # Remove the invalid pkgbase from array
-      input_pkgbases=(${input_pkgbases[@]/$pkgbase})
-      continue
-    }
+    _check_pkgbase "$pkgbase" || continue
+
+    # Add the valid pkgbase
+    valid_pkgbases+="$pkgbase"
 
     # Get the uname
     uname="${kernels[$pkgbase]}"
@@ -129,7 +130,7 @@ _generate_kernel_uki() {
 
   _print_divider && divider=1
 
-  for pkgbase in "${input_pkgbases[@]}"; do
+  for pkgbase in "${valid_pkgbases[@]}"; do
     # Get the uname
     uname="${kernels[$pkgbase]}"
 

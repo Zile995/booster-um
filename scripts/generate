@@ -12,7 +12,7 @@ _generate_uki() {
   UNAME="$2"
 
   _print_divider
-  echo -e "${B}==>${NC} Generating UKI for ${G}${pkgbase} ($UNAME)${NC}..."
+  $_msg_h2_info "Generating UKI for ${G}${pkgbase} ($UNAME)${NC}..."
 
   # vmlinuz path
   VMLINUZ="/boot/vmlinuz-${pkgbase}"
@@ -26,7 +26,7 @@ _generate_uki() {
 
   # Return if required initramfs files do not exist
   if ! stat -- "${booster_inits[@]}" > /dev/null 2>&1 || [[ ! -e $VMLINUZ ]]; then
-    echo -e "${R}  ==>${NC} Unable to generate UKI for ${R}${pkgbase}${NC}..."
+    $_msg_error "Unable to generate UKI for ${R}${pkgbase}${NC}..."
     return
   fi
 
@@ -114,7 +114,7 @@ _generate_kernel_uki() {
     _check_pkgbase "$pkgbase" || continue
 
     # Add the valid pkgbase
-    valid_pkgbases+="$pkgbase"
+    valid_pkgbases+=("$pkgbase")
 
     # Get the uname
     uname="${kernels[$pkgbase]}"
@@ -144,7 +144,7 @@ _generate_initramfs() {
   local pkgbase="$1"
   local uname="$2"
 
-  echo -e "${B}==>${NC} Generating initramfs for ${G}${pkgbase}${NC}..."
+  $_msg_h2_info "Generating initramfs for ${G}${pkgbase}${NC}..."
 
   # Install the vmlinuz
   if ! _install_vmlinuz "$pkgbase" "$uname"; then return 1; fi
@@ -155,7 +155,7 @@ _generate_initramfs() {
   if _has_default_initramfs "$pkgbase"; then
     # Generate initramfs
     if ! booster build --force --kernel-version "$uname" "$initramfs"; then
-      echo -e "${R}==>${NC} Unable to generate initramfs for ${R}${pkgbase}${NC}..."
+      $_msg_error "Unable to generate initramfs for ${R}${pkgbase}${NC}..."
       _remove_leftovers "$pkgbase"
       return 1
     fi
@@ -179,7 +179,7 @@ _install_vmlinuz() {
   local kernel="/usr/lib/modules/${uname}"
   local module_vmlinuz="${kernel}/vmlinuz"
   if [[ ! -e $module_vmlinuz ]]; then
-    echo -e "${R}==>${NC} Unable to find vmlinuz for ${R}${pkgbase}${NC}..."
+    $_msg_error "Unable to find vmlinuz for ${R}${pkgbase}${NC}..."
     return 1
   fi
 
@@ -198,7 +198,7 @@ _generate_fallback_initramfs() {
 
   # Generate the fallback initramfs
   if ! booster build --force --universal --kernel-version "$uname" "$fallback_initramfs"; then 
-    echo -e "${R}==>${NC} Unable to generate initramfs for ${R}${pkgbase}${NC}..."
+    $_msg_error "Unable to generate initramfs for ${R}${pkgbase}${NC}..."
     _remove_leftovers "$pkgbase"
     return 1
   fi
@@ -210,10 +210,10 @@ _generate_fallback_initramfs() {
 # Regenerates UKI files for all installed kernels
 _regenerate_all() {
   [[ ${#kernels[@]} -eq 0 ]] && {
-    echo -e "${R}==>${W} Unable to regenerate all UKI files, ${R}there are no kernels${NC}${W}. Please install at least one kernel.${NC}"
+    $_msg_error "${W}Unable to regenerate all UKI files, ${R}there are no kernels${NC}${W}. Please install at least one kernel."
     exit
   }
-  echo -e "${B}::${W} Generating UKI files for all installed kernels...${NC}"
+  $_msg_h1_info "Generating UKI files for all installed kernels..."
   _generate_kernel_uki "${!kernels[@]}"
 }
 

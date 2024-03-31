@@ -24,7 +24,7 @@ _check_config() {
   else
     CONFIG_VALID=$(yq --exit-status "$CONFIG" &>/dev/null; echo "$?")
     if [[ $CONFIG_VALID -ne 0 ]]; then
-      echo -e "${R}==>${NC} ${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."
+      $_msg_error "${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."
     fi
   fi
 

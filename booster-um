@@ -12,7 +12,7 @@ main() {
       ;;
     *)
       [ $EUID -ne 0 ] &&
-      echo -e "${R}==>${NC} Please run booster-um as ${R}root${NC}." >&2 && exit 1
+      $_msg_error "Please run booster-um as ${R}root${NC}." && exit 1
       ;;
   esac
 
@@ -68,11 +68,11 @@ main() {
       _generate_on_update "$@"
       ;;
     *)
-      echo -e "${R}==>${NC} Unknown parameter ${R}$arg${NC} passed." >&2
+      $_msg_error "Unknown parameter ${R}$arg${NC} passed."
       show_help && exit 1
       ;;
   esac
-  echo -e "${G}==>${NC} Done."
+  $_msg_success "Done"
 }
 
 show_help() {

@@ -5,7 +5,7 @@ set -e
 # Returns current kernel cmdline
 _get_current_cmdline() {
   local current_cmdline=/proc/cmdline
-  echo -e "${Y}==>${NC} Reusing current kernel cmdline from ${Y}$current_cmdline${NC}..." >&2
+  $_msg_h2_warn "Reusing current kernel cmdline from ${Y}$current_cmdline${NC}..."
   echo "$current_cmdline"
 }
 
@@ -53,13 +53,13 @@ _get_cmdline() {
       cmdline="${default_parameters:+$default_parameters }${pkgbase_parameters}"
       cmdline="${cmdline%% }"
       [[ -n "${cmdline// }" ]] || {
-        echo -e "${R}==>${NC} Given cmdline is empty or has only white spaces!" >&2
+        $_msg_error "${R}==>${NC} Given cmdline is empty or has only white spaces!"
         cmdline="@$(_get_current_cmdline)"
       }
     else
       # If pkgbase cmdline is empty or has only white spaces, pass the default cmdline path
       [[ -z $(grep '[^[:space:]]' "$pkgbase_cmdline") ]] && {
-        echo -e "${R}==>${NC} ${Y}$pkgbase_cmdline${NC} is empty or has only white spaces!" >&2
+        $_msg_error "${Y}$pkgbase_cmdline${NC} is empty or has only white spaces!"
         cmdline="@$(_get_current_cmdline)"
       } ||
         # Or pass the pkgbase cmdline path
@@ -68,7 +68,7 @@ _get_cmdline() {
   else
     # If default cmdline file is empty or has only white spaces, use the current cmdline
     [[ -n $(grep '[^[:space:]]' $default_cmdline) ]] || {
-      echo -e "${R}==>${NC} ${Y}$default_cmdline${NC} is empty or has only white spaces!" >&2
+      $_msg_error "${Y}$default_cmdline${NC} is empty or has only white spaces!"
       default_cmdline="$(_get_current_cmdline)"
     }
 

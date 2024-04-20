@@ -23,7 +23,7 @@ _check_config() {
     CONFIG_VALID=1
   else
     CONFIG_VALID=$(yq --exit-status "$CONFIG" &>/dev/null; echo "$?")
-    if [[ $CONFIG_VALID -ne 0 ]]; then
+    if (( $CONFIG_VALID )); then
       $_msg_error "${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."
     fi
   fi
@@ -33,7 +33,7 @@ _check_config() {
 
 # Sets the default signing tool
 _set_signing_tool() {
-  [[ $CONFIG_VALID -eq 1 ]] && return
+  (( $CONFIG_VALID )) && return
   if _command_exists sbsign && yq '.sbsign == true' "$CONFIG" | grep -Fqwx -- 'true'; then SBSIGN=0; fi
 }
 
@@ -45,8 +45,8 @@ _is_universal() {
 
 # Checks if the booster-um should always generate a fallback UKI
 _should_generate_fallback() {
-  [[ -n $generate_fallback ]] && return $generate_fallback
-  [[ $CONFIG_VALID -eq 1 ]] && generate_fallback=1 && return 1
+  [[ -z $generate_fallback ]] || return $generate_fallback
+  (( $CONFIG_VALID )) && generate_fallback=1 && return 1
   if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' && ! _is_universal; then
     generate_fallback=0 && return
   fi
@@ -55,8 +55,8 @@ _should_generate_fallback() {
 
 # Checks if the booster-um should always sign generated UKI
 _should_sign_uki() {
-  [[ -n $sign_uki ]] && return $sign_uki
-  [[ $CONFIG_VALID -eq 1 ]] && sign_uki=0 && return
+  [[ -z $sign_uki ]] || return $sign_uki
+  (( $CONFIG_VALID )) && sign_uki=0 && return
   if ! yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'; then
    sign_uki=0 && return
   fi
@@ -65,8 +65,8 @@ _should_sign_uki() {
 
 # Checks if the booster-um should remove leftovers (vmlinuz and initramfs)
 _should_remove_leftovers() {
-  [[ -n $remove_leftovers ]] && return $remove_leftovers
-  [[ $CONFIG_VALID -eq 1 ]] && remove_leftovers=0 && return
+  [[ -z $remove_leftovers ]] || return $remove_leftovers
+  (( $CONFIG_VALID )) && remove_leftovers=0 && return
   if ! yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'; then
     remove_leftovers=0 && return
   fi
@@ -75,8 +75,8 @@ _should_remove_leftovers() {
 
 # Checks if the booster-um should create EFI entry
 _should_create_efi_entry() {
-  [[ -n $create_efi_entry ]] && return $create_efi_entry
-  [[ $CONFIG_VALID -eq 1 ]] && create_efi_entry=1 && return 1
+  [[ -z $create_efi_entry ]] || return $create_efi_entry
+  (( $CONFIG_VALID )) && create_efi_entry=1 && return 1
   if yq '.efistub == true' "$CONFIG" | grep -Fqwx -- 'true'; then
     create_efi_entry=0 && return
   fi
@@ -85,15 +85,23 @@ _should_create_efi_entry() {
 
 # Get the default EFI entry
 _get_default_entry() {
-  local value="$(yq ".efistub_config.default_entry" "$CONFIG")"
-  [[ $value == null ]] && return
-  echo "$value"
+  if [[ -n $default_entry ]]; then
+    echo $default_entry 
+    return
+  fi
+  if (( ${force_default_entry:-1} )); then
+    default_entry="$(yq ".efistub_config.default_entry" "$CONFIG")"
+  else
+    default_entry="${sorted_pkgbases[0]}"
+  fi
+  [[ $default_entry == null ]] && return
+  echo "$default_entry"
 }
 
 # Checks if the booster-um should append EFI entries to the boot order
 _should_append_entries() {
-  [[ -n $append_entries ]] && return $append_entries
-  [[ $CONFIG_VALID -eq 1 ]] && append_entries=0 && return
+  [[ -z $append_entries ]] || return $append_entries
+  (( $CONFIG_VALID )) && append_entries=0 && return
   if ! yq '.efistub_config.append_entries == false' "$CONFIG" | grep -Fqwx -- 'true'; then
     append_entries=0 && return
   fi
@@ -102,8 +110,8 @@ _should_append_entries() {
 
 # Checks if the base cmdlines should should be shared with pkgbase cmdlines
 _shared_cmdline() {
-  [[ -n $shared_cmdline ]] && return $shared_cmdline
-  [[ $CONFIG_VALID -eq 1 ]] && shared_cmdline=1 && return 1
+  [[ -z $shared_cmdline ]] || return $shared_cmdline
+  (( $CONFIG_VALID )) && shared_cmdline=1 && return 1
   if yq '.cmdline_config.shared_cmdline == true' "$CONFIG" | grep -Fqwx -- 'true'; then
     shared_cmdline=0 && return
   fi
@@ -112,8 +120,8 @@ _shared_cmdline() {
 
 # Checks if the booster-um should create cmdline per kernel
 _cmdline_per_kernel() {
-  [[ -n $cmdline_per_kernel ]] && return $cmdline_per_kernel
-  [[ $CONFIG_VALID -eq 1 ]] && cmdline_per_kernel=1 && return 1
+  [[ -z $cmdline_per_kernel ]] || return $cmdline_per_kernel
+  (( $CONFIG_VALID )) && cmdline_per_kernel=1 && return 1
   if yq '.cmdline_per_kernel == true' "$CONFIG" | grep -Fqwx -- 'true'; then
     cmdline_per_kernel=0 && return
   fi
@@ -184,7 +192,7 @@ _get_splash_path() {
   local default_splash=/usr/share/systemd/bootctl/splash-arch.bmp
 
   # If the config file doesn't exist or is not valid, use the default arch linux splash
-  if [[ $CONFIG_VALID -eq 1 ]] && _is_bmp "$default_splash"; then
+  if (( $CONFIG_VALID )) && _is_bmp "$default_splash"; then
     echo "$default_splash" && return
   fi
 

@@ -59,18 +59,22 @@ _msg() {
     echo -e "$message" | nl -bn -w1
 }
 
-# _msg functions
-# Info
-_msg_info='_msg info'
-_msg_h1_info='_msg info h1'
-_msg_h2_info='_msg info h2'
-# Warn
-_msg_warn='_msg warn'
-_msg_h1_warn='_msg warn h1'
-_msg_h2_warn='_msg warn h2'
-# Error && success
-_msg_error='_msg error h2'
-_msg_success='_msg success h2'
+# _msg functions aliases
+_set_msg_aliases() {
+  # Info
+  _msg_info='_msg info'
+  _msg_h1_info='_msg info h1'
+  _msg_h2_info='_msg info h2'
+
+  # Warn
+  _msg_warn='_msg warn'
+  _msg_h1_warn='_msg warn h1'
+  _msg_h2_warn='_msg warn h2'
+
+  # Error && success
+  _msg_error='_msg error h2'
+  _msg_success='_msg success h2'
+}
 
 # Checks if specified command exists
 _command_exists() {
@@ -117,3 +121,5 @@ _find_kernels() {
   # Sort the pkgbase keys
   readarray -t sorted_pkgbases < <(printf '%s\n' "${!kernels[@]}" | sort)
 }
+
+_set_msg_aliases

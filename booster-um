@@ -12,7 +12,7 @@ declare -g VERSION="1.7.0"
 main() {
   local arg="$1"
 
-  case ${arg} in
+  case "${arg}" in
     ""|-h|--help)
       show_help
       exit 0
@@ -22,8 +22,9 @@ main() {
       exit 0
       ;;
     *)
-      [ $EUID -ne 0 ] &&
-      $_msg_error "Please run booster-um as ${R}root${NC}." && exit 1
+      (( $EUID )) &&
+        $_msg_error "Please run booster-um as ${R}root${NC}." &&
+        exit 1
       ;;
   esac
 

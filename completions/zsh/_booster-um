@@ -25,6 +25,8 @@ _init() {
   _arguments -s \
     "-g[Generate UKI file for specified kernel package name]" \
     "(- *)"{-h,--help}"[Show help information]" \
+    "(- *)"{-v,--version}"[Print version]" \
+    "-o[Remove orphaned EFI entries]" \
     "-r[Remove UKI file for specified kernel package name]" \
     "-C[Remove initramfs*, booster*, vmlinuz* files, entire esp/EFI/Linux dir and other leftovers]" \
     "-G[Generate UKI files for all installed kernels]" \

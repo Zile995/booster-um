@@ -35,7 +35,7 @@ _generate_uki() {
     chmod -f 600 -- "${booster_inits[@]}"
 
   # splash file
-  SPLASH="$(_get_splash_path)"
+  SPLASH="$(_get_splash_path "$pkgbase")"
 
   # microcodes
   local -a microcodes

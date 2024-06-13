@@ -29,6 +29,9 @@ _print_divider() {
 # Args:
 # $1: Message type: info, warn, error, success or message text
 # $2: Header type: h1, h2 or message text
+## h1 is a bold message with :: sign
+## h2 is message with ==> sign
+## Other messages with unspecified header type starts with -> sign
 # $3: Message text
 _msg() {
   local msg_color

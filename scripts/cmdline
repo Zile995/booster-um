@@ -58,8 +58,8 @@ _get_pkgbase_cmdline() {
       $_msg_info "Using the cmdline from $pkgbase_cmdline_path..." >&2
       read -r pkgbase_cmdline < "$pkgbase_cmdline_path"
     } || {
-      _shared_cmdline || {
-        $_msg_warn "The cmdline for ${G}$pkgbase${NC} is not defined, using the base cmdline..." >&2
+      _should_share_default_cmdline || {
+        $_msg_warn "The cmdline for ${G}$pkgbase${NC} is not defined, using the default cmdline..." >&2
         pkgbase_cmdline="$(_get_default_cmdline $fallback)"
       }
     }
@@ -80,7 +80,7 @@ _get_cmdline() {
     local pkgbase_cmdline="$(_get_pkgbase_cmdline "$pkgbase" "$fallback")"
 
     # Concatenate the default and pkgbase cmdline strings
-    if _shared_cmdline; then
+    if _should_share_default_cmdline; then
       local default_cmdline="$(_get_default_cmdline "$fallback")"
       cmdline="${default_cmdline:+$default_cmdline }${pkgbase_cmdline}"
       cmdline="${cmdline%% }"

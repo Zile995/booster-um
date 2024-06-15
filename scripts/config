@@ -46,6 +46,16 @@ _is_universal() {
   yq '.universal == true' "$BOOSTER_CONFIG" | grep -Fqwx -- 'true'
 }
 
+# Checks if the splash should be enabled
+_should_enable_splash() {
+  [[ -z $enable_splash ]] || return $enable_splash
+  (( $CONFIG_VALID )) && enable_splash=0 && return
+  if ! yq '.enable_splash == false' "$CONFIG" | grep -Fqwx -- 'true'; then
+   enable_splash=0 && return
+  fi
+  enable_splash=1; false
+}
+
 # Checks if the booster-um should always generate a fallback UKI
 _should_generate_fallback() {
   [[ -z $generate_fallback ]] || return $generate_fallback
@@ -145,14 +155,14 @@ _get_config_pkgbase_fallback_cmdline() {
   echo "$config_pkgbase_fallback_cmdline"
 }
 
-# Checks if the base cmdlines should be shared with pkgbase cmdlines
-_shared_cmdline() {
-  [[ -z $shared_cmdline ]] || return $shared_cmdline
-  (( $CONFIG_VALID )) && shared_cmdline=1 && return 1
-  if yq '.kernel_config.shared_cmdline == true' "$CONFIG" | grep -Fqwx -- 'true'; then
-    shared_cmdline=0 && return
+# Checks if the default cmdline should be shared with pkgbase cmdlines
+_should_share_default_cmdline() {
+  [[ -z $share_default_cmdline ]] || return $share_default_cmdline
+  (( $CONFIG_VALID )) && share_default_cmdline=1 && return 1
+  if yq '.kernel_config.share_default_cmdline == true' "$CONFIG" | grep -Fqwx -- 'true'; then
+    share_default_cmdline=0 && return
   fi
-  shared_cmdline=1; false
+  share_default_cmdline=1; false
 }
 
 # Checks if the booster-um should create cmdline per kernel
@@ -178,7 +188,7 @@ _is_bmp() {
   local splash="$1"
   # If the the splash exists and is a BMP file, return
   if [[ -e $splash && $(file -b --mime-type "$splash") == 'image/bmp' ]]; then return; fi
-  false
+  $_msg_warn "Splash file: $splash is not a bmp file." >&2; return 1
 }
 
 # Checks if pkgbase has default initramfs type
@@ -228,16 +238,17 @@ _get_splash_path() {
   local splash
   local pkgbase="$1"
 
+  # Return if splash should not be enabled
+  _should_enable_splash || return 0
+
   # If the config file doesn't exist or is not valid, use the default arch linux splash
-  if (( $CONFIG_VALID )) && _is_bmp "$arch_splash"; then
-    echo "$arch_splash" && return
-  fi
+  if (( $CONFIG_VALID )); then echo "$arch_splash" && return; fi
 
   # Set the pkgbase splash path from the config file
   local pkgbase_splash="$(yq ".kernel_config.${pkgbase}.splash" "$CONFIG")"
 
   # Return if pkgbase splash is set to false
-  if [[ $pkgbase_splash == "false" ]]; then
+  if [[ $pkgbase_splash == "false" || -z $pkgbase_splash ]]; then
     return
   else
     splash="$pkgbase_splash"
@@ -245,23 +256,20 @@ _get_splash_path() {
 
   # If the pkgbase splash is empty, try the main splash path
   if [[ $pkgbase_splash == null ]]; then
-
     # Set the default splash path from the config file
-    local default_splash="$(yq '.splash' "$CONFIG")"
+    local default_splash="$(yq '.kernel_config.default_splash' "$CONFIG")"
 
     # Return if main splash is set to false
-    if [[ $default_splash == "false" ]]; then
+    if [[ $default_splash == "false" || -z $default_splash ]]; then
       return
     else
       splash=$default_splash
     fi
 
     # If splash path is not specified or does not exist, use the default arch linux splash
-    if [[ $default_splash == null ]] || [[ ! -e $default_splash ]]; then
-      splash="$arch_splash"
-    fi
+    if [[ $default_splash == null || ! -e $default_splash ]]; then splash="$arch_splash"; fi
   fi
 
   # Finally, return the splash path if the splash is a BMP file
-  if _is_bmp "$splash"; then echo "$splash"; fi
+  if _is_bmp "$splash"; then echo "$splash"; else echo "$arch_splash"; fi
 }

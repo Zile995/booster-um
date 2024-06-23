@@ -54,6 +54,7 @@ If you are using an Arch-based distribution, install [booster-um](https://aur.ar
 
 
 ## Config file
+For information about config, read [this documentation](https://github.com/Zile995/booster-um/blob/main/config/CONFIG.md).
  
 ## First run
 * Create and edit the `/etc/kernel/cmdline` file. Take care to remove entries pointing to **microcode, vmlinuz and initramfs**. Here is a simple cmdline example (Change the `root=` parameter to reflect your Linux root partitions):

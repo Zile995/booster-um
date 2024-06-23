@@ -17,7 +17,6 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
    loglevel=3
    udev.log_level=3
    sysrq_always_enabled=1
-   vt.global_cursor_default=0
 
  fallback_cmdline: >
    root=LABEL=arch_root

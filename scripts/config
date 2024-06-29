@@ -31,6 +31,14 @@ _check_config() {
     fi
   fi
 
+  if ! _should_enable_colors; then
+    W="$NC"
+    R="$NC"
+    G="$NC"
+    B="$NC"
+    Y="$NC"
+  fi
+
   _set_signing_tool
 }
 
@@ -38,6 +46,15 @@ _check_config() {
 _set_signing_tool() {
   (( $CONFIG_VALID )) && return
   if _command_exists sbsign && yq '.sbsign == true' "$CONFIG" | grep -Fqwx -- 'true'; then SBSIGN=0; fi
+}
+
+_should_enable_colors() {
+  [[ -z $colors ]] || return $colors
+  (( $CONFIG_VALID )) && colors=0 && return
+  if ! yq '.colors == false' "$CONFIG" | grep -Fqwx -- 'true'; then
+   colors=0 && return
+  fi
+  colors=1; false
 }
 
 # Checks if the creation of universal images is enabled

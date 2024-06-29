@@ -5,6 +5,7 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
  ```YAML
  sign_uki: true
  sbsign: false
+ colors: true
  efistub: true
  enable_splash: true
  remove_leftovers: true
@@ -57,6 +58,7 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
 ```YAML
 sign_uki: true
 sbsign: false
+colors: true
 efistub: true
 enable_splash: true
 remove_leftovers: true
@@ -73,6 +75,8 @@ fallback_cmdline: "root=LABEL=arch_root rw"
 * `sign_uki` manages the UKI signing. If enabled, `sbctl` (or `sbsign`), will sign generated UKI files. If it is not specified, its value is set to `true`
 
 * `sbsign` manages UKI signing using the `sbsign` tool. If enabled, `sbsign` will be used instead of `sbctl`. After enabling this type of signing, the options in the `sbsign_config` node can be set arbitrarily. If it is not specified, its value is set to `false`
+
+* `colors` colors the output of the booster-um. If it is not specified, its value is set to `true`
 
 * `efistub` manages EFI entries. If enabled, `booster-um` will create a new EFI entry. If it is not specified, its value is set to `false`
 

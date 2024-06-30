@@ -48,6 +48,7 @@ _set_signing_tool() {
   if _command_exists sbsign && yq '.sbsign == true' "$CONFIG" | grep -Fqwx -- 'true'; then SBSIGN=0; fi
 }
 
+# Checks if colors are enabled
 _should_enable_colors() {
   [[ -z $colors ]] || return $colors
   (( $CONFIG_VALID )) && colors=0 && return
@@ -55,6 +56,17 @@ _should_enable_colors() {
    colors=0 && return
   fi
   colors=1; false
+}
+
+# Checks if booster should use less memory.
+# Booster should generate initramfs one by one (not in parallel)
+_low_memory() {
+  [[ -z $low_memory ]] || return $low_memory
+  (( $CONFIG_VALID )) && low_memory=1 && return 1
+  if yq '.low_memory == true' "$CONFIG" | grep -Fqwx -- 'true'; then
+   low_memory=0 && return
+  fi
+  low_memory=1; false
 }
 
 # Checks if the creation of universal images is enabled

@@ -120,7 +120,11 @@ _generate_kernel_uki() {
     uname="${kernels[$pkgbase]}"
 
     # Generate the initramfs
-    _generate_initramfs "$pkgbase" "$uname" & pids+=( $! )
+    if _low_memory; then
+      _generate_initramfs "$pkgbase" "$uname"
+    else
+      _generate_initramfs "$pkgbase" "$uname" & pids+=( $! )
+    fi
   done
 
   # Wait for all background jobs
@@ -192,9 +196,8 @@ _generate_fallback_initramfs() {
   local pkgbase="$1"
   if ! _should_generate_fallback || ! _has_fallback_initramfs "$pkgbase"; then return; fi
 
-  local uname fallback_initramfs
-  uname="$2"
-  fallback_initramfs="/boot/booster-${pkgbase}-fallback.img"
+  local uname="$2"
+  local fallback_initramfs="/boot/booster-${pkgbase}-fallback.img"
 
   # Generate the fallback initramfs
   if ! booster build --force --universal --kernel-version "$uname" "$fallback_initramfs"; then 

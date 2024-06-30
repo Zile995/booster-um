@@ -7,6 +7,7 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
  sbsign: false
  colors: true
  efistub: true
+ low_memory: false
  enable_splash: true
  remove_leftovers: true
  generate_fallback: true
@@ -60,6 +61,7 @@ sign_uki: true
 sbsign: false
 colors: true
 efistub: true
+low_memory: false
 enable_splash: true
 remove_leftovers: true
 generate_fallback: true
@@ -80,11 +82,13 @@ fallback_cmdline: "root=LABEL=arch_root rw"
 
 * `efistub` manages EFI entries. If enabled, `booster-um` will create a new EFI entry. If it is not specified, its value is set to `false`
 
+* `low_memory` is an option that prevents high memory usage. Instead of generating initramfs in parallel, booster-um will generate initramfs one by one. This is certainly slower, but takes up less memory. If it is not specified, its value is set to `false`
+
+* `enable_splash` is an option that enables splash screen. If you want to disable splash for **all specified or unspecified** kernels under `kernel_config` node, set it to `false`. By default this option is enabled and `/usr/share/systemd/bootctl/splash-arch.bmp` splash will be used (you can change it with `default_splash` option under `kernel_config` node)
+
 * `remove_leftovers` manages the removal of leftovers when generating the UKI files. Besides the vmlinuz and booster files, EFI entries, fallback images and kernel cmdlines are treated as leftovers, they will be removed if `efistub`, `cmdline_per_kernel`, `generate_fallback` options are disabled. If enabled, leftovers will always be removed after generating UKI files. Leftovers will always be removed if you manually delete the UKI for the specified kernel or all installed kernels (`booster-um -r <package>` or `booster-um -R`/`booster-um -C`). If it is not specified, its value is set to `true`
 
 * `generate_fallback` manages the creation of fallback (universal) UKI files. Separate fallback images will not be created if `universal` flag is enabled in the `/etc/booster.yaml` config. If it is not specified, its value is set to `false`
-
-* `enable_splash` is an option that enables splash screen. If you want to disable splash for **all specified or unspecified** kernels under `kernel_config` node, set it to `false`. By default this option is enabled and `/usr/share/systemd/bootctl/splash-arch.bmp` splash will be used (you can change it with `default_splash` option under `kernel_config` node)
 
 * `cmdline` is the default kernel cmdline and is used by **all** kernels. If `cmdline` is not defined here, booster-um will try to use the cmdline from `/etc/kernel/cmdline` file. If cmdline is not defined neither in the config nor in the `/etc/kernel/cmdline` file, the current cmdline from `/proc/cmdline` will be used. Kernel parameters can be written in multiple lines after the `>` sign. For example:
   ```YAML
@@ -93,7 +97,7 @@ fallback_cmdline: "root=LABEL=arch_root rw"
     rw
     quiet
   ```
-  
+
 * `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If it is not defined here, booster-um will try to use the cmdline from `/etc/kernel/fallback-cmdline` file. If cmdline is not defined neither in the config nor in the `/etc/kernel/fallback-cmdline` file, the current cmdline from `/proc/cmdline` will be used
 
 ## Kernel config (`kernel_config` node)
@@ -138,7 +142,7 @@ fallback_cmdline: "root=LABEL=arch_root rw"
         default_splash: ""
         default_splash: false
     ```
-    
+
   * `pkgbase` (kernel package name, below as `$pkgbase`) node provides additional configuration for **specified** kernel package name:
 
     * `splash` a picture to display during boot for the **specified** kernel. To disable splash screen for **specified** kernel pkgbase, simply set this option to `false` or leave it blank. If `splash` is not defined, the `default_splash` option outside the `$pkgbase` node, will be used

@@ -181,7 +181,7 @@ _create_efi_entry() {
   # Set OS label to NAME + (pkgbase): Example: Arch Linux (linux)
   label="$(_get_label "$pkgbase")"
 
-  echo -e "${B} ->${NC} Creating EFI entry ${G}${label}${NC}..."
+  $_msg_info "Creating EFI entry ${G}${label}${NC}..."
 
   # Add the EFI entry
   efibootmgr --create \
@@ -218,7 +218,7 @@ _remove_efi_entry() {
     sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
 
   for label in "${labels[@]}"; do
-    echo -e "${Y} ->${NC} Removing EFI entry ${Y}${label}${NC}..."
+    $_msg_warn "Removing EFI entry ${Y}${label}${NC}..."
   done
 
   for boot_num in "${boot_nums[@]}"; do
@@ -265,7 +265,7 @@ _remove_orphaned_efi_entries() {
         sed 's/.*\*[[:blank:]]\(.*\)[[:blank:]]\(.*\)/\1/')
 
       for label in "${labels[@]}"; do
-        echo -e "${Y} ->${NC} Removing EFI entry ${Y}${label}${NC}..."
+        $_msg_warn "Removing EFI entry ${Y}${label}${NC}..."
       done
 
       # Remove the EFI entries

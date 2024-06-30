@@ -17,7 +17,7 @@ add_kernel() {
 
   # Return if there is a pkgbase key
   read -r pkgbase < "${kernel_dir}/pkgbase"
-  [[ -v kernels[$pkgbase] ]] && return
+  [[ ! -v kernels[$pkgbase] ]] || return
 
   # Assign the uname value for kernel pkgbase
   kernels["$pkgbase"]="$kernel_dir"

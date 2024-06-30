@@ -28,7 +28,7 @@ add_kernel() {
 
   # Return if there is a pkgbase key
   read -r pkgbase < "${kernel_dir}/pkgbase"
-  [[ -v kernels[$pkgbase] ]] && return
+  [[ ! -v kernels[$pkgbase] ]] || return
 
   # Assign the uname value for kernel pkgbase
   kernels["$pkgbase"]="$uname"
@@ -66,7 +66,5 @@ if [[ $ALL -eq 0 ]]; then booster-um -G; exit; fi
 # Sort the pkgbases
 readarray -t sorted_pkgbases < <(printf '%s\n' "${!kernels[@]}" | sort)
 
-for pkgbase in "${sorted_pkgbases[@]}"; do
-  # Genearate UKI file for updated kernel
-  booster-um -u "$pkgbase" "${kernels[$pkgbase]}"
-done
+# Genearate UKI files for updated kernels
+booster-um -u "${sorted_pkgbases[@]}"

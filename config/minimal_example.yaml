@@ -1,0 +1,25 @@
+efistub: true
+generate_fallback: true
+
+cmdline: >
+  root=LABEL=arch_root
+  rw
+  quiet
+  loglevel=3
+  udev.log_level=3
+  sysrq_always_enabled=1
+  vt.global_cursor_default=0
+
+fallback_cmdline: >
+  root=LABEL=arch_root
+  rw
+  sysrq_always_enabled=1
+
+kernel_config:
+  default_initramfs: [default]
+  linux-lts:
+    splash: false
+    initramfs: [fallback]
+
+efistub_config:
+  default_entry: linux

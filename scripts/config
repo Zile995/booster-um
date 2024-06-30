@@ -15,6 +15,9 @@ declare -A initramfs_config
 declare -g CONFIG=/etc/booster-um.yaml
 declare -g BOOSTER_CONFIG=/etc/booster.yaml
 
+# Set the default Arch Linux splash
+declare -g arch_splash=/usr/share/systemd/bootctl/splash-arch.bmp
+
 # Checks if booster-um.yaml config is valid
 _check_config() {
   [[ ! -e $CONFIG ]] && CONFIG_VALID=$((1-$?)) && return
@@ -23,17 +26,47 @@ _check_config() {
     CONFIG_VALID=1
   else
     CONFIG_VALID=$(yq --exit-status "$CONFIG" &>/dev/null; echo "$?")
-    if [[ $CONFIG_VALID -ne 0 ]]; then
-      echo -e "${R}==>${NC} ${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."
+    if (( $CONFIG_VALID )); then
+      $_msg_error "${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."
     fi
+  fi
+
+  if ! _should_enable_colors; then
+    W="$NC"
+    R="$NC"
+    G="$NC"
+    B="$NC"
+    Y="$NC"
   fi
 
   _set_signing_tool
 }
 
+# Sets the default signing tool
 _set_signing_tool() {
-  [[ $CONFIG_VALID -eq 1 ]] && return
+  (( $CONFIG_VALID )) && return
   if _command_exists sbsign && yq '.sbsign == true' "$CONFIG" | grep -Fqwx -- 'true'; then SBSIGN=0; fi
+}
+
+# Checks if colors are enabled
+_should_enable_colors() {
+  [[ -z $colors ]] || return $colors
+  (( $CONFIG_VALID )) && colors=0 && return
+  if ! yq '.colors == false' "$CONFIG" | grep -Fqwx -- 'true'; then
+   colors=0 && return
+  fi
+  colors=1; false
+}
+
+# Checks if booster should use less memory.
+# Booster should generate initramfs one by one (not in parallel)
+_low_memory() {
+  [[ -z $low_memory ]] || return $low_memory
+  (( $CONFIG_VALID )) && low_memory=1 && return 1
+  if yq '.low_memory == true' "$CONFIG" | grep -Fqwx -- 'true'; then
+   low_memory=0 && return
+  fi
+  low_memory=1; false
 }
 
 # Checks if the creation of universal images is enabled
@@ -42,10 +75,20 @@ _is_universal() {
   yq '.universal == true' "$BOOSTER_CONFIG" | grep -Fqwx -- 'true'
 }
 
+# Checks if the splash should be enabled
+_should_enable_splash() {
+  [[ -z $enable_splash ]] || return $enable_splash
+  (( $CONFIG_VALID )) && enable_splash=0 && return
+  if ! yq '.enable_splash == false' "$CONFIG" | grep -Fqwx -- 'true'; then
+   enable_splash=0 && return
+  fi
+  enable_splash=1; false
+}
+
 # Checks if the booster-um should always generate a fallback UKI
 _should_generate_fallback() {
-  [[ -n $generate_fallback ]] && return $generate_fallback
-  [[ $CONFIG_VALID -eq 1 ]] && generate_fallback=1 && return 1
+  [[ -z $generate_fallback ]] || return $generate_fallback
+  (( $CONFIG_VALID )) && generate_fallback=1 && return 1
   if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' && ! _is_universal; then
     generate_fallback=0 && return
   fi
@@ -54,8 +97,8 @@ _should_generate_fallback() {
 
 # Checks if the booster-um should always sign generated UKI
 _should_sign_uki() {
-  [[ -n $sign_uki ]] && return $sign_uki
-  [[ $CONFIG_VALID -eq 1 ]] && sign_uki=0 && return
+  [[ -z $sign_uki ]] || return $sign_uki
+  (( $CONFIG_VALID )) && sign_uki=0 && return
   if ! yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'; then
    sign_uki=0 && return
   fi
@@ -64,8 +107,8 @@ _should_sign_uki() {
 
 # Checks if the booster-um should remove leftovers (vmlinuz and initramfs)
 _should_remove_leftovers() {
-  [[ -n $remove_leftovers ]] && return $remove_leftovers
-  [[ $CONFIG_VALID -eq 1 ]] && remove_leftovers=0 && return
+  [[ -z $remove_leftovers ]] || return $remove_leftovers
+  (( $CONFIG_VALID )) && remove_leftovers=0 && return
   if ! yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'; then
     remove_leftovers=0 && return
   fi
@@ -74,35 +117,88 @@ _should_remove_leftovers() {
 
 # Checks if the booster-um should create EFI entry
 _should_create_efi_entry() {
-  [[ -n $create_efi_entry ]] && return $create_efi_entry
-  [[ $CONFIG_VALID -eq 1 ]] && create_efi_entry=1 && return 1
+  [[ -z $create_efi_entry ]] || return $create_efi_entry
+  (( $CONFIG_VALID )) && create_efi_entry=1 && return 1
   if yq '.efistub == true' "$CONFIG" | grep -Fqwx -- 'true'; then
     create_efi_entry=0 && return
   fi
   create_efi_entry=1; false
 }
 
-# Get the default EFI entry
+# Returns the default EFI entry
 _get_default_entry() {
-  local value="$(yq ".efistub_config.default_entry" "$CONFIG")"
-  [[ $value == null ]] && return
-  echo "$value"
+  if [[ -n $default_entry ]]; then
+    echo $default_entry 
+    return
+  fi
+  if (( ${force_default_entry:-1} )); then
+    default_entry="$(yq ".efistub_config.default_entry" "$CONFIG")"
+  else
+    default_entry="${sorted_pkgbases[0]}"
+  fi
+  [[ $default_entry == null ]] && return
+  echo "$default_entry"
 }
 
 # Checks if the booster-um should append EFI entries to the boot order
 _should_append_entries() {
-  [[ -n $append_entries ]] && return $append_entries
-  [[ $CONFIG_VALID -eq 1 ]] && append_entries=0 && return
+  [[ -z $append_entries ]] || return $append_entries
+  (( $CONFIG_VALID )) && append_entries=0 && return
   if ! yq '.efistub_config.append_entries == false' "$CONFIG" | grep -Fqwx -- 'true'; then
     append_entries=0 && return
   fi
   append_entries=1; false
 }
 
+# Returns the base cmdline
+_get_config_cmdline() {
+  if [[ -z $config_cmdline ]]; then
+    config_cmdline="$(yq ".cmdline" "$CONFIG")"
+    [[ $config_cmdline == null ]] && return
+  fi
+  echo "$config_cmdline"
+}
+
+# Returns the base fallback cmdline
+_get_config_fallback_cmdline() {
+  if [[ -z $config_fallback_cmdline ]]; then
+    config_fallback_cmdline="$(yq ".fallback_cmdline" "$CONFIG")"
+    [[ $config_fallback_cmdline == null ]] && return
+  fi
+  echo "$config_fallback_cmdline"
+}
+
+# Returns the pkgbase cmdline
+_get_config_pkgbase_cmdline() {
+  local pkgbase="$1"
+  local config_pkgbase_cmdline="$(yq ".kernel_config.${pkgbase}.cmdline" "$CONFIG")"
+  [[ $config_pkgbase_cmdline == null ]] && return
+  echo "$config_pkgbase_cmdline"
+}
+
+# Returns the pkgbase fallback cmdline
+_get_config_pkgbase_fallback_cmdline() {
+  local pkgbase="$1"
+  local config_pkgbase_fallback_cmdline="$(yq ".kernel_config.${pkgbase}.fallback_cmdline" "$CONFIG")"
+  [[ $config_pkgbase_fallback_cmdline == null ]] && return
+  echo "$config_pkgbase_fallback_cmdline"
+}
+
+# Checks if the default cmdline should be shared with pkgbase cmdlines
+_should_share_default_cmdline() {
+  [[ -z $share_default_cmdline ]] || return $share_default_cmdline
+  (( $CONFIG_VALID )) && share_default_cmdline=1 && return 1
+  if yq '.kernel_config.share_default_cmdline == true' "$CONFIG" | grep -Fqwx -- 'true'; then
+    share_default_cmdline=0 && return
+  fi
+  share_default_cmdline=1; false
+}
+
+# Checks if the booster-um should create cmdline per kernel
 _cmdline_per_kernel() {
-  [[ -n $cmdline_per_kernel ]] && return $cmdline_per_kernel
-  [[ $CONFIG_VALID -eq 1 ]] && cmdline_per_kernel=1 && return 1
-  if yq '.cmdline_per_kernel == true' "$CONFIG" | grep -Fqwx -- 'true'; then
+  [[ -z $cmdline_per_kernel ]] || return $cmdline_per_kernel
+  (( $CONFIG_VALID )) && cmdline_per_kernel=1 && return 1
+  if yq '.kernel_config.cmdline_per_kernel == true' "$CONFIG" | grep -Fqwx -- 'true'; then
     cmdline_per_kernel=0 && return
   fi
   cmdline_per_kernel=1; false
@@ -121,7 +217,7 @@ _is_bmp() {
   local splash="$1"
   # If the the splash exists and is a BMP file, return
   if [[ -e $splash && $(file -b --mime-type "$splash") == 'image/bmp' ]]; then return; fi
-  false
+  $_msg_warn "Splash file: $splash is not a bmp file." >&2; return 1
 }
 
 # Checks if pkgbase has default initramfs type
@@ -139,7 +235,7 @@ _has_fallback_initramfs() {
 # Gets the default initramfs types
 _get_default_initramfs_types() {
   local -n initramfs_types="$1"
-  readarray initramfs_types < <(yq ".initramfs_config.default_types[]" "$CONFIG");
+  readarray initramfs_types < <(yq ".kernel_config.default_initramfs[]" "$CONFIG");
   if [[ ! "${initramfs_types[*]}" =~ "default" && "${initramfs_types[*]}" =~ "fallback" ]] && ! _should_generate_fallback; then
     initramfs_types=(default)
   fi
@@ -151,7 +247,7 @@ _set_initramfs_config() {
   local -a value=()
   for pkgbase in "${sorted_pkgbases[@]}"; do
     # Get the initramfs type array for specified kernel pkgbase
-    readarray value < <(yq ".initramfs_config.${pkgbase}[]" "$CONFIG");
+    readarray value < <(yq ".kernel_config.${pkgbase}.initramfs[]" "$CONFIG");
 
     # If fallback images should not be generated and there is only fallback type, create the default image
     if [[ ! "${value[*]}" =~ "default" && "${value[*]}" =~ "fallback" ]] && ! _should_generate_fallback; then
@@ -168,22 +264,41 @@ _set_initramfs_config() {
 
 # Returns the splash file path
 _get_splash_path() {
-  # Set the default arch linux splash
-  local default_splash=/usr/share/systemd/bootctl/splash-arch.bmp
+  local splash
+  local pkgbase="$1"
+
+  # Return if splash should not be enabled
+  _should_enable_splash || return 0
 
   # If the config file doesn't exist or is not valid, use the default arch linux splash
-  if [[ $CONFIG_VALID -eq 1 ]] && _is_bmp "$default_splash"; then
-    echo "$default_splash" && return
+  if (( $CONFIG_VALID )); then echo "$arch_splash" && return; fi
+
+  # Set the pkgbase splash path from the config file
+  local pkgbase_splash="$(yq ".kernel_config.${pkgbase}.splash" "$CONFIG")"
+
+  # Return if pkgbase splash is set to false
+  if [[ $pkgbase_splash == "false" || -z $pkgbase_splash ]]; then
+    return
+  else
+    splash="$pkgbase_splash"
   fi
 
-  # Otherwise use the splash path from the config file
-  local splash="$(yq '.splash' "$CONFIG")"
+  # If the pkgbase splash is empty, try the main splash path
+  if [[ $pkgbase_splash == null ]]; then
+    # Set the default splash path from the config file
+    local default_splash="$(yq '.kernel_config.default_splash' "$CONFIG")"
 
-  # If splash path is not specified or does not exist, use the default arch linux splash
-  if [[ $splash == null ]] || [[ ! -e $splash ]]; then
-    splash="$default_splash"
+    # Return if main splash is set to false
+    if [[ $default_splash == "false" || -z $default_splash ]]; then
+      return
+    else
+      splash=$default_splash
+    fi
+
+    # If splash path is not specified or does not exist, use the default arch linux splash
+    if [[ $default_splash == null || ! -e $default_splash ]]; then splash="$arch_splash"; fi
   fi
 
   # Finally, return the splash path if the splash is a BMP file
-  if _is_bmp "$splash"; then echo "$splash"; fi
+  if _is_bmp "$splash"; then echo "$splash"; else echo "$arch_splash"; fi
 }

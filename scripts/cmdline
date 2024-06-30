@@ -2,48 +2,101 @@
 
 set -e
 
+declare -g current_cmdline_path="/proc/cmdline"
+
 # Returns current kernel cmdline
 _get_current_cmdline() {
-  local current_cmdline=/proc/cmdline
-  echo -e "${Y}==>${NC} Reusing current kernel cmdline from ${Y}$current_cmdline${NC}" >&2
+  local current_cmdline
+  read -r current_cmdline < "$current_cmdline_path"
+  $_msg_warn "Reusing current kernel cmdline from ${Y}$current_cmdline_path${NC}..." >&2
   echo "$current_cmdline"
 }
 
-# Returns default kernel cmdline
+# Gets the defined cmdline string from the config file or the kernel cmdline file
 _get_default_cmdline() {
-  local default_cmdline=/etc/kernel/cmdline
-  # Create the default cmdline if it doesn't exist
-  [[ ! -e $default_cmdline ]] && touch "$default_cmdline"
+  local pkgbase fallback default_cmdline default_cmdline_path
+  fallback="$1"
+
+  # # Set the defaul cmdline defined in config file
+  [[ $fallback -eq 1 ]] && 
+    default_cmdline="$(_get_config_cmdline)" ||
+    default_cmdline="$(_get_config_fallback_cmdline)"
+
+  # If cmdline is empty or not defined, get the cmdline from cmdline file
+  if [[ -z "${default_cmdline// }" ]]; then
+    [[ $fallback -eq 1 ]] && 
+      default_cmdline_path=/etc/kernel/cmdline ||
+      default_cmdline_path="/etc/kernel/cmdline-fallback"
+
+    [[ -f $default_cmdline_path ]] && {
+        $_msg_info "Using the cmdline from $default_cmdline_path..." >&2
+        read -r default_cmdline < "$default_cmdline_path"
+      } || default_cmdline="$(_get_current_cmdline)"
+  fi
+
   echo "$default_cmdline"
+}
+
+# Gets the defined pkgbase cmdline string from the config file or the kernel cmdline file
+_get_pkgbase_cmdline() {
+  local pkgbase fallback pkgbase_cmdline pkgbase_cmdline_path
+  pkgbase="$1"
+  fallback="$2"
+
+  # Set the pkgbase cmdline defined in config file
+  [[ $fallback -eq 1 ]] &&
+    pkgbase_cmdline="$(_get_config_pkgbase_cmdline "$pkgbase")" ||
+    pkgbase_cmdline="$(_get_config_pkgbase_fallback_cmdline "$pkgbase")"
+
+  # If cmdline is empty or not defined, get the cmdline from cmdline file
+  if [[ -z "${pkgbase_cmdline// }" ]]; then
+    [[ $fallback -eq 1 ]] &&
+      pkgbase_cmdline_path="/etc/kernel/${pkgbase}.cmdline" ||
+      pkgbase_cmdline_path="/etc/kernel/${pkgbase}-fallback.cmdline"
+
+    [[ -f $pkgbase_cmdline_path ]] && {
+      $_msg_info "Using the cmdline from $pkgbase_cmdline_path..." >&2
+      read -r pkgbase_cmdline < "$pkgbase_cmdline_path"
+    } || {
+      _should_share_default_cmdline || {
+        $_msg_warn "The cmdline for ${G}$pkgbase${NC} is not defined, using the default cmdline..." >&2
+        pkgbase_cmdline="$(_get_default_cmdline $fallback)"
+      }
+    }
+  fi
+
+  echo "$pkgbase_cmdline"
 }
 
 # Returns kernel cmdline string or cmdline file path
 _get_cmdline() {
-  local pkgbase default_cmdline cmdline
+  local pkgbase fallback cmdline
   pkgbase="$1"
-
-  default_cmdline="$(_get_default_cmdline)"
+  fallback="$2"
 
   # If cmdline per kernel is enabled, create the cmdline string
   if _cmdline_per_kernel; then
-    # Create the pkgbase cmdline
-    local pkgbase_cmdline="/etc/kernel/${pkgbase}.cmdline"
-    [[ ! -e $pkgbase_cmdline ]] && touch "$pkgbase_cmdline"
-
-    local default_parameters pkgbase_parameters
-    read -r default_parameters < "$default_cmdline"
-    read -r pkgbase_parameters < "$pkgbase_cmdline"
+    # Get the pkgbase cmdline
+    local pkgbase_cmdline="$(_get_pkgbase_cmdline "$pkgbase" "$fallback")"
 
     # Concatenate the default and pkgbase cmdline strings
-    cmdline="${default_parameters:+$default_parameters }${pkgbase_parameters}"
-    cmdline="${cmdline%% }"
-    [[ -z "${cmdline// }" ]] && cmdline="@$(_get_current_cmdline)"
+    if _should_share_default_cmdline; then
+      local default_cmdline="$(_get_default_cmdline "$fallback")"
+      cmdline="${default_cmdline:+$default_cmdline }${pkgbase_cmdline}"
+      cmdline="${cmdline%% }"
+    else
+      # Or pass the pkgbase cmdline
+      cmdline="$pkgbase_cmdline"
+    fi
   else
-    # If default cmdline file is empty or has only white spaces, use the current cmdline
-    [[ -z $(grep '[^[:space:]]' $default_cmdline) ]] && default_cmdline="$(_get_current_cmdline)"
-
-    # Otherwise, pass the default cmdline @path
-    cmdline="@${default_cmdline}"
+    # Use the default cmdline
+    cmdline="$(_get_default_cmdline "$fallback")"
   fi
+
+  [[ -n "${cmdline// }" ]] || {
+    $_msg_error "${R}==>${NC} Given cmdline is empty or has only white spaces!"
+    cmdline="$(_get_current_cmdline)"
+  }
+
   echo "$cmdline"
 }

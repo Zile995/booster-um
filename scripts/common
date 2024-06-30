@@ -16,6 +16,69 @@ declare -A kernels
 # An array of sorted pkgbases
 declare -a sorted_pkgbases=()
 
+# Control divider printing
+declare -g divider
+
+# Prints the divider (50 '-' chars in a row)
+_print_divider() {
+  (( ${divider:-0} )) ||
+    echo "$(printf '%.0s-' {1..50})"
+}
+
+# Prints the message
+# Args:
+# $1: Message type: info, warn, error, success or message text
+# $2: Header type: h1, h2 or message text
+## h1 is a bold message with :: sign
+## h2 is message with ==> sign
+## Other messages with unspecified header type starts with -> sign
+# $3: Message text
+_msg() {
+  local msg_color
+  local msg_sign
+  local message="$3"
+
+  case "$1" in
+    info) msg_color="${B}" ;;
+    warn) msg_color="${Y}" ;;
+    error) msg_color="${R}" ;;
+    success) msg_color="${G}" ;;
+    *) msg_color="${NC}" && message=$1 ;;
+  esac
+
+  case "$2" in
+    h1) msg_sign="::"; message="${W}${message}" ;;
+    h2) msg_sign="==>" ;;
+    *|"")
+      msg_sign="->"
+      message="${2:-$message}" && local msg_indent=0
+      ;;
+  esac
+
+  local message="${msg_color}${msg_sign}${NC} ${message}${NC}"
+
+  (( ${msg_indent:-1} )) &&
+    echo -e "$message" ||
+    echo -e "$message" | nl -bn -w1
+}
+
+# _msg functions aliases
+_set_msg_aliases() {
+  # Info
+  _msg_info='_msg info'
+  _msg_h1_info='_msg info h1'
+  _msg_h2_info='_msg info h2'
+
+  # Warn
+  _msg_warn='_msg warn'
+  _msg_h1_warn='_msg warn h1'
+  _msg_h2_warn='_msg warn h2'
+
+  # Error && success
+  _msg_error='_msg error h2'
+  _msg_success='_msg success h2'
+}
+
 # Checks if specified command exists
 _command_exists() {
   command -v -- "$1" > /dev/null 2>&1
@@ -31,7 +94,7 @@ _pkgbase_exists() {
 _check_pkgbase() {
   local pkgbase="$1"
   if ! _pkgbase_exists "$pkgbase"; then
-    echo -e "${R}Invalid kernel package name.${NC}" >&2 && exit 1
+    $_msg_error "${R}Invalid kernel package name: ${pkgbase}" && return 1
   fi
 }
 
@@ -61,3 +124,5 @@ _find_kernels() {
   # Sort the pkgbase keys
   readarray -t sorted_pkgbases < <(printf '%s\n' "${!kernels[@]}" | sort)
 }
+
+_set_msg_aliases

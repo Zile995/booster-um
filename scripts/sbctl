@@ -25,7 +25,7 @@ _sign_uki() {
   if [[ $ALWAYS_SIGN -eq 1 ]] && _in_db "$uki"; then return; fi
 
   # Sign UKI file with sbctl
-  sbctl sign --save "$uki" || :
+  sbctl sign --save "$uki" | nl -bn -w1 || :
 }
 
 # Removes the file from the sbctl database
@@ -38,6 +38,6 @@ _remove_from_db() {
   # Remove the file if it exists in the database
   if _in_db "$file"; then
     # Remove the file from sbctl database
-    sbctl remove-file "$file" || :
+    sbctl remove-file "$file" | nl -bn -w1 || :
   fi
 }

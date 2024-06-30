@@ -82,7 +82,7 @@ fallback_cmdline: "root=LABEL=arch_root rw"
 
 * `efistub` manages EFI entries. If enabled, `booster-um` will create a new EFI entry. If it is not specified, its value is set to `false`
 
-* `low_memory` is an option that prevents high memory usage. Instead of generating initramfs in parallel, booster-um will generate initramfs one by one. This is certainly slower, but takes up less memory. If it is not specified, its value is set to `false`
+* `low_memory` is an option that prevents high memory usage, especially when fallback images are generated. Instead of generating initramfs in parallel, booster-um will generate initramfs one by one. This is certainly slower, but takes up less memory. If it is not specified, its value is set to `false`
 
 * `enable_splash` is an option that enables splash screen. If you want to disable splash for **all specified or unspecified** kernels under `kernel_config` node, set it to `false`. By default this option is enabled and `/usr/share/systemd/bootctl/splash-arch.bmp` splash will be used (you can change it with `default_splash` option under `kernel_config` node)
 

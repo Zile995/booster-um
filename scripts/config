@@ -89,7 +89,7 @@ _should_enable_splash() {
 _should_generate_fallback() {
   [[ -z $generate_fallback ]] || return $generate_fallback
   (( $CONFIG_VALID )) && generate_fallback=1 && return 1
-  if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' && ! _is_universal; then
+  if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' || _is_universal; then
     generate_fallback=0 && return
   fi
   generate_fallback=1; false
@@ -250,12 +250,14 @@ _set_initramfs_config() {
     readarray value < <(yq ".kernel_config.${pkgbase}.initramfs[]" "$CONFIG");
 
     # If fallback images should not be generated and there is only fallback type, create the default image
-    if [[ ! "${value[*]}" =~ "default" && "${value[*]}" =~ "fallback" ]] && ! _should_generate_fallback; then
+    if _is_universal; then
+      value=(fallback)
+    elif [[ ! "${value[*]}" =~ "default" && "${value[*]}" =~ "fallback" ]] && ! _should_generate_fallback; then
       value=(default)
     fi
 
     # If the kernel is not specified, use the value for other kernels
-    [[ ${#value[@]} -eq 0 ]] && _get_default_initramfs_types value
+    [[ ${#value[@]} -eq 0 ]] && _get_default_initramfs_types value || :
 
     # Save the initramfs config for specified kernel pkgbase
     initramfs_config[$pkgbase]="${value[@]}"

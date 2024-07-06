@@ -71,7 +71,6 @@ _low_memory() {
 
 # Checks if the creation of universal images is enabled
 _is_universal() {
-  [[ $CONFIG_VALID -eq 1 ]] && return 1
   yq '.universal == true' "$BOOSTER_CONFIG" | grep -Fqwx -- 'true'
 }
 
@@ -88,8 +87,11 @@ _should_enable_splash() {
 # Checks if the booster-um should always generate a fallback UKI
 _should_generate_fallback() {
   [[ -z $generate_fallback ]] || return $generate_fallback
-  (( $CONFIG_VALID )) && generate_fallback=1 && return 1
-  if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' || _is_universal; then
+  if (( ! $CONFIG_VALID )); then
+    if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' || _is_universal; then
+      generate_fallback=0 && return
+    fi
+  elif _is_universal; then
     generate_fallback=0 && return
   fi
   generate_fallback=1; false

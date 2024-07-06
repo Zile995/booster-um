@@ -88,7 +88,7 @@ fallback_cmdline: "root=LABEL=arch_root rw"
 
 * `remove_leftovers` manages the removal of leftovers when generating the UKI files. Besides the vmlinuz and booster files, EFI entries, fallback images and kernel cmdlines are treated as leftovers, they will be removed if `efistub`, `cmdline_per_kernel`, `generate_fallback` options are disabled. If enabled, leftovers will always be removed after generating UKI files. Leftovers will always be removed if you manually delete the UKI for the specified kernel or all installed kernels (`booster-um -r <package>` or `booster-um -R`/`booster-um -C`). If it is not specified, its value is set to `true`
 
-* `generate_fallback` manages the creation of fallback (universal) UKI files. Separate fallback images will not be created if `universal` flag is enabled in the `/etc/booster.yaml` config. If it is not specified, its value is set to `false`
+* `generate_fallback` manages the creation of fallback (universal) UKI files. Only fallback images will be generated if `universal` flag is enabled in the `/etc/booster.yaml` config. If it is not specified, its value is set to `false`
 
 * `cmdline` is the default kernel cmdline and is used by **all** kernels. If `cmdline` is not defined here, booster-um will try to use the cmdline from `/etc/kernel/cmdline` file. If cmdline is not defined neither in the config nor in the `/etc/kernel/cmdline` file, the current cmdline from `/proc/cmdline` will be used. Kernel parameters can be written in multiple lines after the `>` sign. For example:
   ```YAML
@@ -117,7 +117,7 @@ fallback_cmdline: "root=LABEL=arch_root rw"
      initramfs: [default]
    linux-lts:
      splash: false
-     cmdline: "root=LABEL=arch_root rw"
+     cmdline: "root=LABEL=arch_root rw quiet"
      fallback_cmdline: "root=LABEL=arch_root rw"
      initramfs: [fallback]
 ```

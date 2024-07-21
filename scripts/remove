@@ -41,13 +41,15 @@ _remove_other_leftovers() {
 
   local uki="${EFI_DIR}/arch-${pkgbase}.efi"
   local fallback_uki="${EFI_DIR}/arch-${pkgbase}-fallback.efi"
+  local booster_config="$(_get_booster_config "$pkgbase")"
 
   # Remove fallback UKI files in ESP if fallback generation is not enabled
-  if ! _should_generate_fallback && [[ -f $fallback_uki ]]; then
-    _remove_from_db "$fallback_uki"
-    _remove_efi_entry "$fallback_uki"
-    $_msg_warn "Removing ${Y}${fallback_uki}${NC} file..."
-    rm -f "$fallback_uki" && local fallback_removed=1
+  if [[ ! $booster_config =~ "universal: true" ]] && \
+    ! _should_generate_fallback && [[ -f $fallback_uki ]]; then
+      _remove_from_db "$fallback_uki"
+      _remove_efi_entry "$fallback_uki"
+      $_msg_warn "Removing ${Y}${fallback_uki}${NC} file..."
+      rm -f "$fallback_uki" && local fallback_removed=1
   fi
 
   if ! _has_default_initramfs "$pkgbase" && [[ -f $uki ]]; then

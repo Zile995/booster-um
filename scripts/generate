@@ -17,10 +17,13 @@ _generate_uki() {
   # vmlinuz path
   VMLINUZ="/boot/vmlinuz-${pkgbase}"
 
+  # Get booster config for the pkgbase
+  local booster_config="$(_get_booster_config "$pkgbase")"
+
   # booster initramfs
   local -a booster_inits=()
   if _has_default_initramfs "$pkgbase"; then booster_inits+=("/boot/booster-${pkgbase}.img"); fi
-  if _should_generate_fallback && _has_fallback_initramfs "$pkgbase"; then
+  if [[ $booster_config =~ "universal: true" ]] || _should_generate_fallback && _has_fallback_initramfs "$pkgbase"; then
     booster_inits+=("/boot/booster-${pkgbase}-fallback.img")
   fi
 
@@ -153,12 +156,22 @@ _generate_initramfs() {
   # Install the vmlinuz
   if ! _install_vmlinuz "$pkgbase" "$uname"; then return 1; fi
 
-  # Set the booster initramfs file path
-  local initramfs="/boot/booster-${pkgbase}.img"
-
   if _has_default_initramfs "$pkgbase"; then
+    # Set the booster initramfs file path
+    local initramfs="/boot/booster-${pkgbase}.img"
+
+    # Get booster config
+    local booster_config="$(_get_booster_config "$pkgbase")"
+
+    # Set booster args
+    local -a booster_args=(build \
+                           --force \
+                           ${booster_config:+"--config=/dev/stdin"} \
+                           --kernel-version "$uname" \
+                          "$initramfs")
+
     # Generate initramfs
-    if ! booster build --force --kernel-version "$uname" "$initramfs"; then
+    if ! echo "$booster_config" | booster "${booster_args[@]}"; then
       $_msg_error "Unable to generate initramfs for ${R}${pkgbase}${NC}..."
       _remove_leftovers "$pkgbase"
       return 1
@@ -168,7 +181,7 @@ _generate_initramfs() {
     chmod -f 600 -- "$initramfs"
   fi
 
-  # Generate the fallback initramfs
+   # Generate the fallback initramfs
   _generate_fallback_initramfs "$pkgbase" "$uname"
 }
 
@@ -194,14 +207,29 @@ _install_vmlinuz() {
 # Generates fallback initramfs
 _generate_fallback_initramfs() {
   local pkgbase="$1"
-  if ! _should_generate_fallback || ! _has_fallback_initramfs "$pkgbase"; then return; fi
+
+  local booster_config="$(_get_booster_config "$pkgbase")"
+
+  if [[ ! $booster_config =~ "universal: true" ]]; then
+    if ! _should_generate_fallback || ! _has_fallback_initramfs "$pkgbase"; then
+      return;
+    fi
+  fi
 
   local uname="$2"
   local fallback_initramfs="/boot/booster-${pkgbase}-fallback.img"
 
+  # Set booster args
+  local -a booster_args=(build \
+                         --force \
+                         ${booster_config:+"--config=/dev/stdin"} \
+                         --universal \
+                         --kernel-version "$uname" \
+                         "$fallback_initramfs")
+
   # Generate the fallback initramfs
-  if ! booster build --force --universal --kernel-version "$uname" "$fallback_initramfs"; then 
-    $_msg_error "Unable to generate initramfs for ${R}${pkgbase}${NC}..."
+  if ! echo "$booster_config" | booster "${booster_args[@]}"; then 
+    $_msg_error "Unable to generate fallback initramfs for ${R}${pkgbase}${NC}..."
     _remove_leftovers "$pkgbase"
     return 1
   fi

@@ -206,6 +206,14 @@ _cmdline_per_kernel() {
   cmdline_per_kernel=1; false
 }
 
+# Returns the pkgbase booster config
+_get_booster_config() {
+  local pkgbase="$1"
+  local booster_config="$(yq ".kernel_config.${pkgbase}.booster_config" "$CONFIG")"
+  [[ $booster_config == null ]] && return
+  echo "$booster_config"
+}
+
 # Returns the sbsign property value
 _get_sbsign_property() {
   local property="$1"
@@ -251,8 +259,11 @@ _set_initramfs_config() {
     # Get the initramfs type array for specified kernel pkgbase
     readarray value < <(yq ".kernel_config.${pkgbase}.initramfs[]" "$CONFIG");
 
+    # Get booster config
+    local booster_config="$(_get_booster_config "$pkgbase")"
+
     # If fallback images should not be generated and there is only fallback type, create the default image
-    if _is_universal; then
+    if _is_universal || [[ $booster_config =~ "universal: true" ]]; then
       value=(fallback)
     elif [[ ! "${value[*]}" =~ "default" && "${value[*]}" =~ "fallback" ]] && ! _should_generate_fallback; then
       value=(default)
@@ -262,7 +273,7 @@ _set_initramfs_config() {
     [[ ${#value[@]} -eq 0 ]] && _get_default_initramfs_types value || :
 
     # Save the initramfs config for specified kernel pkgbase
-    initramfs_config[$pkgbase]="${value[@]}"
+    initramfs_config["$pkgbase"]="${value[@]}"
   done
 }
 

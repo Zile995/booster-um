@@ -35,6 +35,9 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
      # cmdline:
      # fallback_cmdline:
      initramfs: [default]
+     booster_config: |
+       compression: zstd
+       extra_files: busybox,fsck,fsck.ext4
    linux-lts:
      splash: false
      # cmdline:
@@ -115,6 +118,9 @@ fallback_cmdline: "root=LABEL=arch_root rw"
        quiet
      fallback_cmdline: "root=LABEL=arch_root rw"
      initramfs: [default]
+     booster_config: |
+       compression: zstd
+       extra_files: busybox,fsck,fsck.ext4
    linux-lts:
      splash: false
      cmdline: "root=LABEL=arch_root rw quiet"
@@ -152,6 +158,9 @@ fallback_cmdline: "root=LABEL=arch_root rw"
     * `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If it is not defined here, booster-um will try to use the cmdline from `/etc/kernel/$pkgbase-fallback.cmdline` file. If cmdline is not defined neither in the config nor in the `/etc/kernel/$pkgbase-fallback.cmdline`, booster-um will try to use the default `fallback_cmdline` outside the `kernel_config` node
 
     * `initramfs` provides initramfs type configuration for **specified** kernel. Here you can specify up to two types, `default` and `fallback`. If it is not defined, the `default_initramfs` will be used
+
+    * `booster_config` provides additional booster configuration for **specified** kernel. Booster configuration can be written in multiple lines after the `|` sign. You can read [here](https://github.com/anatol/booster/blob/master/docs/manpage.md#config-file) about booster configuration.
+     > **Note**: If you enable `universal` flag here, booster-um will only create a fallback UKI for the **specified** kernel even if `generate_fallback` is disabled, or `initramfs` (`default_initramfs`) has the **fallback** type specified.
 
 ## EFISTUB config
 

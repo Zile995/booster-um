@@ -159,7 +159,12 @@ fallback_cmdline: "root=LABEL=arch_root rw"
 
     * `initramfs` provides initramfs type configuration for **specified** kernel. Here you can specify up to two types, `default` and `fallback`. If it is not defined, the `default_initramfs` will be used
 
-    * `booster_config` provides additional booster configuration for **specified** kernel. Booster configuration can be written in multiple lines after the `|` sign. You can read [here](https://github.com/anatol/booster/blob/master/docs/manpage.md#config-file) about booster configuration.
+    * `booster_config` provides additional booster configuration for **specified** kernel. Booster configuration can be written in multiple lines after the `|` sign. You can read [here](https://github.com/anatol/booster/blob/master/docs/manpage.md#config-file) about booster configuration. For example:
+      ```YAML
+      booster_config: |
+       compression: lz4
+       extra_files: busybox,fsck,fsck.ext4
+      ```
      > **Note**: If you enable `universal` flag here, booster-um will only create a fallback UKI for the **specified** kernel even if `generate_fallback` is disabled, or `initramfs` (`default_initramfs`) has the **fallback** type specified.
 
 ## EFISTUB config

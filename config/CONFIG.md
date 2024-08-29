@@ -7,6 +7,7 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
  sbsign: false
  colors: true
  efistub: true
+ microcode: true
  low_memory: false
  enable_splash: true
  remove_leftovers: true
@@ -64,6 +65,7 @@ sign_uki: true
 sbsign: false
 colors: true
 efistub: true
+microcode: true
 low_memory: false
 enable_splash: true
 remove_leftovers: true
@@ -84,6 +86,8 @@ fallback_cmdline: "root=LABEL=arch_root rw"
 * `colors` colors the output of the booster-um. If it is not specified, its value is set to `true`
 
 * `efistub` manages EFI entries. If enabled, `booster-um` will create a new EFI entry. If it is not specified, its value is set to `false`
+
+* `microcode` manages the inclusion of the microcode images (intel-ucode and amd-ucode). If it is not specified, its value is set to `true`
 
 * `low_memory` is an option that prevents high memory usage, especially when fallback images are generated. Instead of generating initramfs in parallel, booster-um will generate initramfs one by one. This is certainly slower, but takes up less memory. If it is not specified, its value is set to `false`
 

@@ -42,7 +42,9 @@ _generate_uki() {
 
   # microcodes
   local -a microcodes
-  mapfile -d '' microcodes < <(find /boot -name '*-ucode.img' -type f -print0)
+  if _include_microcode; then
+    mapfile -d '' microcodes < <(find /boot -name '*-ucode.img' -type f -print0)
+  fi
 
   # UKI file path, create EFI dir if it doesn't exist
   [[ ! -d $EFI_DIR ]] && mkdir -p "$EFI_DIR"

@@ -69,6 +69,16 @@ _low_memory() {
   low_memory=1; false
 }
 
+# Checks if booster-um should include microcode files.
+_include_microcode() {
+  [[ -z $microcode ]] || return $microcode
+  (( $CONFIG_VALID )) && microcode=0 && return
+  if ! yq '.microcode == false' "$CONFIG" | grep -Fqwx -- 'true'; then
+   microcode=0 && return
+  fi
+  microcode=1; false
+}
+
 # Checks if the creation of universal images is enabled
 _is_universal() {
   yq '.universal == true' "$BOOSTER_CONFIG" | grep -Fqwx -- 'true'

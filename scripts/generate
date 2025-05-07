@@ -48,7 +48,8 @@ _generate_uki() {
 
   # UKI file path, create EFI dir if it doesn't exist
   [[ ! -d $EFI_DIR ]] && mkdir -p "$EFI_DIR"
-  local uki_path="${EFI_DIR}/arch-${pkgbase}"
+  local os_id="$(grep -Po '(?<=^ID=).*' /etc/os-release)"
+  local uki_path="${EFI_DIR}/${os_id}-${pkgbase}"
 
   local -a sign_args=()
   if [[ $SBSIGN -eq 0 ]] && _should_sign_uki; then

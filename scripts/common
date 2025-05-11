@@ -19,6 +19,10 @@ declare -a sorted_pkgbases=()
 # Control divider printing
 declare -g divider
 
+# Get OS id and name
+declare -g os_id="$(grep -Po '(?<=^ID=).*' /etc/os-release)"
+declare -g os_name="$(grep -Po '(?<=^NAME=").*(?=")' /etc/os-release)"
+
 # Prints the divider (50 '-' chars in a row)
 _print_divider() {
   (( ${divider:-0} )) ||

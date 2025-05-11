@@ -98,10 +98,8 @@ _loader_file_exists() {
 # Returns the EFI entry label
 _get_label() {
   local pkgbase="$1"
-  # Get OS NAME
-  label="$(grep -Po '(?<=^NAME=").*(?=")' /etc/os-release)"
   # Set OS label to NAME + (pkgbase)
-  label="${label} ($pkgbase)"
+  label="${os_name} ($pkgbase)"
   echo "$label"
 }
 
@@ -231,7 +229,7 @@ _remove_orphaned_efi_entries() {
     # Return if efibootmgr doesn't exist
   if ! _command_exists efibootmgr; then exit; fi
 
-  local search="${EFI_DIR#$ESP_MOUNT}/arch-"
+  local search="${EFI_DIR#$ESP_MOUNT}/${os_id}-"
   search="${search//\//\\}"
 
   local sed_string

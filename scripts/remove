@@ -39,8 +39,8 @@ _remove_boot_leftovers() {
 _remove_other_leftovers() {
   local pkgbase="$1"
 
-  local uki="${EFI_DIR}/arch-${pkgbase}.efi"
-  local fallback_uki="${EFI_DIR}/arch-${pkgbase}-fallback.efi"
+  local uki="${EFI_DIR}/${os_id}-${pkgbase}.efi"
+  local fallback_uki="${EFI_DIR}/${os_id}-${pkgbase}-fallback.efi"
   local booster_config="$(_get_booster_config "$pkgbase")"
 
   # Remove fallback UKI files in ESP if fallback generation is not enabled
@@ -152,8 +152,8 @@ _remove_uki() {
     # Store all UKI files in array
     readarray -t uki_files < <(find "${EFI_DIR}" \
       -type f \
-      -name "arch-${pkgbase}.efi" -o \
-      -name "arch-${pkgbase}-fallback.efi" 2> /dev/null)
+      -name "${os_id}-${pkgbase}.efi" -o \
+      -name "${os_id}-${pkgbase}-fallback.efi" 2> /dev/null)
 
     for uki in "${uki_files[@]}"; do
       # Remove the UKI file from sbctl database

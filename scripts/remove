@@ -12,7 +12,7 @@ _remove_cmdline() {
   local pkgbase="$1"
 
   # cmdline paths
-  local cmdline_paths=(/etc/kernel/"${pkgbase}"{-fallback.cmdline,.cmdline})
+  local cmdline_paths=(/etc/kernel/"${pkgbase}"{-cmdline-fallback,-cmdline})
 
   for cmdline_path in "${cmdline_paths[@]}"; do
     # If the cmdline path exists, remove it
@@ -126,8 +126,8 @@ _cleanup() {
   rm -rf "$EFI_DIR"
 
   # Remove *.cmdline files
-  $_msg_warn "Removing all ${Y}.cmdline${NC} files from ${Y}/etc/kernel${NC}..."
-  rm -f "/etc/kernel/*.cmdline"
+  $_msg_warn "Removing all ${Y}cmdline${NC} files from ${Y}/etc/kernel${NC}..."
+  rm -f "/etc/kernel/*cmdline*"
 
   shopt -u nullglob
 }

@@ -89,7 +89,7 @@ _generate_uki() {
       --initrd="$INITRD" \
       ${CMDLINE:+"--cmdline=$CMDLINE"} \
       ${SPLASH:+"--splash=$SPLASH"} "${sign_args[@]}" \
-      --output="$UKI" | tail -n 1 | nl -bn -w1 &&
+      --output="$UKI" 2>&1 | nl -bn -w1 | tail -n 1 &&
       _sign_uki "$UKI" &&
       _create_efi_entry "$UKI" "$pkgbase" || :
 

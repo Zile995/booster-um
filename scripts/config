@@ -183,20 +183,22 @@ _get_config_fallback_cmdline() {
 # Returns the pkgbase cmdline
 _get_config_pkgbase_cmdline() {
   local pkgbase="$1"
-  local config_pkgbase_cmdline="$(yq ".kernel_config.${pkgbase}.cmdline" "$CONFIG")"
+  local fallback="$2"
+  local config_cmdline_name
+
+  [[ $fallback -eq 1 ]] && config_cmdline_name="cmdline" || config_cmdline_name="fallback_cmdline"
+  local config_pkgbase_cmdline="$(yq ".kernel_config.${pkgbase}.${config_cmdline_name}" "$CONFIG")"
+  
+  if [[ $fallback -eq 0 && -z "${config_pkgbase_cmdline// }" ]]; then
+    config_pkgbase_cmdline="$(yq ".kernel_config.${pkgbase}.cmdline" "$CONFIG")"
+  fi
+  
   [[ $config_pkgbase_cmdline == null ]] && return
+
   echo "$config_pkgbase_cmdline"
 }
 
-# Returns the pkgbase fallback cmdline
-_get_config_pkgbase_fallback_cmdline() {
-  local pkgbase="$1"
-  local config_pkgbase_fallback_cmdline="$(yq ".kernel_config.${pkgbase}.fallback_cmdline" "$CONFIG")"
-  [[ $config_pkgbase_fallback_cmdline == null ]] && return
-  echo "$config_pkgbase_fallback_cmdline"
-}
-
-# Checks if the default cmdline should be shared with pkgbase cmdlines
+# Checks if the default cmdline should be shared with the pkgbase cmdlines
 _should_share_default_cmdline() {
   [[ -z $share_default_cmdline ]] || return $share_default_cmdline
   (( $CONFIG_VALID )) && share_default_cmdline=1 && return 1

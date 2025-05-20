@@ -93,7 +93,7 @@ fallback_cmdline: "root=LABEL=arch_root rw"
 
 * `enable_splash` is an option that enables splash screen. If you want to disable splash for **all specified or unspecified** kernels under `kernel_config` node, set it to `false`. By default this option is enabled and `/usr/share/systemd/bootctl/splash-arch.bmp` splash will be used (you can change it with `default_splash` option under `kernel_config` node)
 
-* `remove_leftovers` manages the removal of leftovers when generating the UKI files. Besides the vmlinuz and booster files, EFI entries, fallback images and kernel cmdlines are treated as leftovers, they will be removed if `efistub`, `cmdline_per_kernel`, `generate_fallback` options are disabled. If enabled, leftovers will always be removed after generating UKI files. Leftovers will always be removed if you manually delete the UKI for the specified kernel or all installed kernels (`booster-um -r <package>` or `booster-um -R`/`booster-um -C`). If it is not specified, its value is set to `true`
+* `remove_leftovers` manages the removal of leftovers when generating the UKI files. Besides the vmlinuz and booster files: EFI entries, fallback images and kernel cmdlines are treated as leftovers. They will be removed if `efistub`, `cmdline_per_kernel` or `generate_fallback` options are disabled. If enabled, leftovers will always be removed after generating UKI files. Leftovers will always be removed if you manually delete the UKI for the specified kernel or all installed kernels (`booster-um -r <package>` or `booster-um -R`/`booster-um -C`). If it is not specified, its value is set to `true`
 
 * `generate_fallback` manages the creation of fallback (universal) UKI files. Only fallback images will be generated if `universal` flag is enabled in the `/etc/booster.yaml` config. If it is not specified, its value is set to `false`
 
@@ -104,8 +104,12 @@ fallback_cmdline: "root=LABEL=arch_root rw"
     rw
     quiet
   ```
+Also, you can write kernel parameters in multiple lines inside the cmdline files located in `/etc/kernel`. All sequences of whitespaces (newlines, tabs, spaces) will be replaced with single space.
 
-* `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If it is not defined here, booster-um will try to use the cmdline from `/etc/kernel/cmdline-fallback` file. If cmdline is not defined neither in the config nor in the `/etc/kernel/cmdline-fallback` file, the current cmdline from `/proc/cmdline` will be used
+* `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If the cmdline is not defined here, booster-um will try to use the cmdline from files in this order:
+  * `/etc/kernel/cmdline-fallback` 
+  * `/etc/kernel/cmdline` 
+  If cmdline is not defined neither in the config nor in the mentioned files, the current cmdline from `/proc/cmdline` will be used
 
 ## Kernel config (`kernel_config` node)
 
@@ -157,9 +161,17 @@ fallback_cmdline: "root=LABEL=arch_root rw"
 
     * `splash` a picture to display during boot for the **specified** kernel. To disable splash screen for **specified** kernel pkgbase, simply set this option to `false` or leave it blank. If `splash` is not defined, the `default_splash` option outside the `$pkgbase` node, will be used
 
-    * `cmdline` is the cmdline for the **specified** kernel. This cmdline will be applied if the `cmdline_per_kernel` option is enabled. If `cmdline` is not defined here, booster-um will try to use the cmdline from `/etc/kernel/$pkgbase.cmdline` file. If cmdline is not defined neither in the config nor in the `/etc/kernel/$pkgbase.cmdline`, booster-um will try to use the default `cmdline` outside the `kernel_config` node
+    * `cmdline` is the cmdline for the **specified** kernel. This cmdline will be applied if the `cmdline_per_kernel` option is enabled. If cmdline is not defined here, booster-um will try to use the default cmdline in the config file, outside the `kernel_config` node, the `cmdline`. If `cmdline` is not defined here, booster-um will try to use the cmdline from files in this order:
+      * `/etc/kernel/$pkgbase-cmdline` 
+      * `/etc/kernel/cmdline` 
+      If cmdline doesn't exist neither in the config nor in the mentioned files, booster-um will try to use the current cmdline from `/proc/cmdline`
 
-    * `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If it is not defined here, booster-um will try to use the cmdline from `/etc/kernel/$pkgbase-fallback.cmdline` file. If cmdline is not defined neither in the config nor in the `/etc/kernel/$pkgbase-fallback.cmdline`, booster-um will try to use the default `fallback_cmdline` outside the `kernel_config` node
+    * `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If cmdline is not defined here, booster-um will try to use the default cmdline for `$pkgbase`. If $pkgbase cmdlines are not defined, booster-um will try to use the default cmdlines in the config file, outside the `kernel_config` node (first `fallback_cmdline`, `then cmdline`). If these cmdlines are not defined in the config file, booster-um will try to use the cmdline from files in this order:
+      * `/etc/kernel/$pkgbase-cmdline-fallback` 
+      * `/etc/kernel/$pkgbase-cmdline` 
+      * `/etc/kernel/cmdline-fallback` 
+      * `/etc/kernel/cmdline` 
+      If cmdline doesn't exist neither in the config file nor in the mentioned files, booster-um will try to use the current cmdline from `/proc/cmdline`
 
     * `initramfs` provides initramfs type configuration for **specified** kernel. Here you can specify up to two types, `default` and `fallback`. If it is not defined, the `default_initramfs` will be used
 
@@ -169,7 +181,7 @@ fallback_cmdline: "root=LABEL=arch_root rw"
        compression: lz4
        extra_files: busybox,fsck,fsck.ext4
       ```
-     > **Note**: If you enable `universal` flag here, booster-um will only create a fallback UKI for the **specified** kernel even if `generate_fallback` is disabled, or `initramfs` (`default_initramfs`) has the **fallback** type specified.
+     > **Note**: If you enable `universal` flag here, booster-um will only create a fallback UKI for the **specified** kernel even if `generate_fallback` is disabled, or `initramfs` (`default_initramfs`) has the **fallback** type specified. So, the booster config is respected first.
 
 ## EFISTUB config
 

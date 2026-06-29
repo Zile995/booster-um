@@ -105,7 +105,7 @@ fallback_cmdline: "root=LABEL=arch_root rw"
     quiet
   ```
 
-* `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If it is not defined here, booster-um will try to use the cmdline from `/etc/kernel/fallback-cmdline` file. If cmdline is not defined neither in the config nor in the `/etc/kernel/fallback-cmdline` file, the current cmdline from `/proc/cmdline` will be used
+* `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If it is not defined here, booster-um will try to use the cmdline from `/etc/kernel/cmdline-fallback` file. If cmdline is not defined neither in the config nor in the `/etc/kernel/cmdline-fallback` file, the current cmdline from `/proc/cmdline` will be used
 
 ## Kernel config (`kernel_config` node)
 
@@ -138,7 +138,7 @@ fallback_cmdline: "root=LABEL=arch_root rw"
 
   * `cmdline_per_kernel` manages the creation of the cmdline per kernel. If this option is enabled, each kernel will use a separate cmdline which can be defined under `pkgbase` node within the `cmdline` option. If it is not specified, its value is set to `false`
 
-  * `share_default_cmdline` allows default cmdline to be shared with the cmdline of the **specified** kernel pkgbase under the `kernel_config` node. The default cmdline `cmdline`, `fallback_cmdline` or `/etc/kernel/cmdline`, `/etc/kernel/fallback-cmdline` files will be used as a shared cmdline for **all** kernels. That means that the kernel cmdline specified under `pkgbase` node, will be added to the default cmdline. This option only takes effect if the `cmdline_per_kernel` option is enabled. By default this option is set to `false`
+  * `share_default_cmdline` allows default cmdline to be shared with the cmdline of the **specified** kernel pkgbase under the `kernel_config` node. The default cmdline `cmdline`, `fallback_cmdline` or `/etc/kernel/cmdline`, `/etc/kernel/cmdline-fallback` files will be used as a shared cmdline for **all** kernels. That means that the kernel cmdline specified under `pkgbase` node, will be added to the default cmdline. This option only takes effect if the `cmdline_per_kernel` option is enabled. By default this option is set to `false`
 
   * `default_initramfs` array provides initramfs type configuration for all other unspecified kernels. You can specify up to two types, `default` and `fallback`. if not defined, its values ​​will be `default` and `fallback`
    > **Note**: If you specified `fallback` type, you must enable `generate_fallback`, otherwise it will generate `default` images only

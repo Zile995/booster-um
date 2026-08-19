@@ -19,14 +19,9 @@ declare -a sorted_pkgbases=()
 # Control divider printing
 declare -g divider
 
-# Get OS id and name
-declare -g os_id="$(grep -Po '(?<=^ID=).*' /etc/os-release)"
-declare -g os_name="$(grep -Po '(?<=^NAME=").*(?=")' /etc/os-release)"
-
 # Prints the divider (50 '-' chars in a row)
 _print_divider() {
-  (( ${divider:-0} )) ||
-    echo "$(printf '%.0s-' {1..50})"
+  (( ${divider:-0} )) || { printf '%.0s-' {1..50}; echo; }
 }
 
 # Prints the message
@@ -53,7 +48,7 @@ _msg() {
   case "$2" in
     h1) msg_sign="::"; message="${W}${message}" ;;
     h2) msg_sign="==>" ;;
-    *|"")
+    *)
       msg_sign="->"
       message="${2:-$message}" && local msg_indent=0
       ;;
@@ -61,9 +56,11 @@ _msg() {
 
   local message="${msg_color}${msg_sign}${NC} ${message}${NC}"
 
-  (( ${msg_indent:-1} )) &&
-    echo -e "$message" ||
+  if (( ${msg_indent:-1} )); then
+    echo -e "$message"
+  else
     echo -e "$message" | nl -bn -w1
+  fi
 }
 
 # _msg functions aliases
@@ -98,7 +95,8 @@ _pkgbase_exists() {
 _check_pkgbase() {
   local pkgbase="$1"
   if ! _pkgbase_exists "$pkgbase"; then
-    $_msg_error "${R}Invalid kernel package name: ${pkgbase}" && return 1
+    $_msg_error "${R}Invalid kernel package name: ${pkgbase}"
+    return 1
   fi
 }
 

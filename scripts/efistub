@@ -15,9 +15,6 @@ declare -g ESP_PARTUUID
 # EFI System Partition mount point. Examples: /boot, /efi, /boot/efi
 declare -g ESP_MOUNT
 
-# Boot order
-declare -a boot_order
-
 # Sets EFI dir path
 _set_efi_path() {
   local esp_path boot_path
@@ -58,8 +55,7 @@ _set_efi_path() {
 
 # Checks if efi entry exists
 _efi_entry_exists() {
-  local loader_path esp_partuuid
-  loader_path="$1"
+  local loader_path="$1"
   efibootmgr | grep -w "$ESP_PARTUUID" | \
   grep -Fwq -e "${loader_path}" -e "${loader_path^^}"
 }
@@ -76,8 +72,8 @@ _get_loader_path() {
   echo "$efi_path"
 }
 
-# Checks if loader file exists
-_loader_file_exists() {
+# Get the UKI file path from the EFI loader path
+_get_uki_path() {
   local loader_path uki_name uki_path
   loader_path="$1"
 
@@ -91,33 +87,174 @@ _loader_file_exists() {
   # Set the UKI file path
   uki_path="${EFI_DIR}/${uki_name}"
 
+  echo "$uki_path"
+}
+
+# Checks if loader file exists
+_loader_file_exists() {
+  local loader_path uki_path
+  loader_path="$1"
+
+  # Get the uki file path
+  uki_path="$(_get_uki_path "$loader_path")"
+
   # Check if the UKI file exists
   [[ -f $uki_path ]]
 }
 
+# _get_efi_info - Get EFI boot info via efibootmgr
+# Usage:
+# _get_efi_info <type> [<pattern>] [-u] <result_var>
+# Params:
+#   <type>       : -n (boot numbers), -l (labels), -p (paths), -o (boot order)
+#   <pattern>: Required for -n, -l, -p; not used with -o
+#   -u           : Optional; return unique results
+#   <result_var> : Name of array variable to store results (passed by name)
+_get_efi_info() {
+  local type="$1"
+  local uniq_flag=""
+  local pattern=""
+  local -n result_ref
+  local result=()
+
+  # Validate type
+  case "$type" in
+    -n|-l|-p|-o) ;; # Do nothing
+    *)
+      # Return with error
+      echo "Error: Invalid or missing type parameter" >&2
+      return 1
+    ;;
+  esac
+
+  shift
+
+  if [[ "$type" == "-o" ]]; then
+    # boot_order has no pattern
+    if [[ "$1" == "-u" ]]; then
+      uniq_flag="yes"
+      shift
+    fi
+    if [[ $# -ne 1 ]]; then
+      echo "Usage: _get_efi_info -o [-u] <result_ref>" >&2
+      return 1
+    fi
+    declare -n result_ref="$1"
+  else
+    # Other types require pattern
+    if [[ -z "$1" ]]; then
+      echo "Error: Missing <pattern> for type '$type'" >&2
+      return 1
+    fi
+    pattern="$1"
+    shift
+
+    if [[ "$1" == "-u" ]]; then
+      uniq_flag="yes"
+      shift
+    fi
+
+    if [[ $# -ne 1 ]]; then
+      echo "Usage: _get_efi_info <type> <pattern> [-u] <result_ref>" >&2
+      return 1
+    fi
+    declare -n result_ref="$1"
+  fi
+
+  case "$type" in
+    -n)
+      # Get boot numbers for specified loader path
+      readarray -t result < <(efibootmgr | \
+        grep -w "$ESP_PARTUUID" | grep -Fw -e "$pattern" -e "${pattern^^}" | \
+        awk '{ print $1 }' | \
+        sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
+      ;;
+    -l)
+      # Get all labels for specified loader path
+      readarray -t result < <(efibootmgr | \
+        grep -w "$ESP_PARTUUID" | grep -Fw -e "$pattern" -e "${pattern^^}" | \
+        sed 's/.*\*[[:blank:]]\(.*\)[[:blank:]]\(.*\)/\1/')
+      ;;
+    -p)
+      # Get all loader paths for specified loader path
+      readarray -t result < <(efibootmgr | \
+        grep -w "$ESP_PARTUUID" | \
+        grep -Fi "$pattern" | \
+        sed "s/.*)\///")
+      ;;
+    -o)
+      # Get efibootmgr boot order
+      readarray -td, result < <(efibootmgr | \
+        grep -w "BootOrder" | \
+        sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
+      ;;
+    *)
+      echo "Unknown type: $type" >&2
+      return 1
+      ;;
+  esac
+
+  # Uniquify if requested
+  if [[ "$uniq_flag" == "yes" ]]; then
+    readarray -t result_ref < <(printf "%s\n" "${result[@]}" | sort -u)
+  else
+    result_ref=("${result[@]}")
+  fi
+}
+
 # Returns the EFI entry label
 _get_label() {
-  local pkgbase="$1"
-  # Set OS label to NAME + (pkgbase)
-  label="${os_name} ($pkgbase)"
-  echo "$label"
+  local pkgbase uki os_name
+  pkgbase="$1"
+  uki="$2" 
+  os_name="$(_get_os_name)"
+
+  # If UKI file is fallback, append the -fallback string to the pkgbase name
+  [[ $uki == *"${pkgbase}-fallback.efi"* ]] && pkgbase="${pkgbase}-fallback"
+
+  # Return the label: Entry name + (pkgbase)
+  echo "$os_name ($pkgbase)"
+}
+
+# Checks EFI lables, removes orhaned entries and reports if EFI entry should be added
+_should_add_entry() {
+  local label="$1"
+  local loader_path="$2"
+
+  # If entry exists, check the labels
+  if _efi_entry_exists "$loader_path"; then
+    local labels loader_paths
+    # Get labels and paths
+    _get_efi_info -l "$loader_path" labels
+    _get_efi_info -n "$loader_path" boot_nums
+
+    # Loop with index
+    for i in "${!labels[@]}"; do
+      if [[ "${labels[$i]}" != "$label" ]]; then
+        # Remove the EFI label with wrong name containing the same loader path
+        $_msg_warn "EFI entry name has been changed. Removing EFI entry ${Y}${labels[$i]}${NC}..."
+        efibootmgr -b "${boot_nums[$i]}" -B > /dev/null
+      else
+        local contains=0
+      fi
+    done
+
+    [[ -z $contains ]] && return
+  fi
 }
 
 # Checks if the default entry should be readded with correct boot index
 _should_readd_default_entry() {
   local index="$1"
   local loader_path="$2"
+  shift 2
+  local -a boot_order=("$@")
 
-  local -a boot_nums
-  readarray -t boot_nums < <(efibootmgr | \
-    grep -w "$ESP_PARTUUID" | \
-    grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
-    awk '{ print $1 }' | \
-    sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//' | \
-    uniq -u)
+  local boot_nums
+  _get_efi_info -n "$loader_path" -u boot_nums
   
   # Check if the default entry is not first in boot order
-  [[ ! "${boot_nums[*]}" =~ "${boot_order[$index]}" ]]
+  [[ ! "${boot_nums[*]}" =~ ${boot_order[$index]} ]]
 }
 
 # Adds the EFI entry
@@ -131,27 +268,33 @@ _create_efi_entry() {
   pkgbase="$2"
 
   # Get current boot order
-  readarray -td, boot_order < <(efibootmgr | \
-    grep -w "BootOrder" | \
-    sed -r 's/0+([0-9]+)/\1/g;s/BootOrder: //')
+  local boot_order
+  _get_efi_info -o boot_order
 
   # Set loader path with backslashes
   loader_path="$(_get_loader_path "$uki")"
 
   # Get default entry
-  local default_entry="$(_get_default_entry)"
+  default_entry="$(_get_default_entry)"
 
   # If the default entry exists and is not default, remove it first
   if [[ $default_entry == "$pkgbase" ]]; then
-    if [[ ! $loader_path =~ "${pkgbase}.efi" ]] && \
-      _has_default_initramfs "$pkgbase"; then index=1; fi
-    if _should_readd_default_entry "$index" "$loader_path"; then
+    # Check if path is a fallback image
+    if [[ ! $loader_path == *"${pkgbase}.efi"* ]] && _has_default_initramfs "$pkgbase"; then
+      index=1;
+    fi
+
+    if _should_readd_default_entry "$index" "$loader_path" "${boot_order[@]}"; then
       # Remove old efi entry
       _remove_efi_entry "$uki"
     fi
+
+  # If we should append new entries to the boot list
   elif _should_append_entries; then
     # Preserve old boot order
     index="${#boot_order[@]}"
+    
+  # Otherwise, decide where to insert based on fallback initramfs  
   elif _pkgbase_exists "$default_entry" && [[ ${#boot_order[@]} -gt 1 ]]; then
     # If append_entries is disabled and default_entry is specified,
     # add new EFI entry to the second or third position
@@ -159,120 +302,97 @@ _create_efi_entry() {
       _should_generate_fallback; then index=2; else index=1; fi
   fi
 
-  # If entry exists, do not create it
-  if _efi_entry_exists "$loader_path"; then return; fi
-
-  # If UKI file is fallback, append the -fallback string to the pkgbase name
-  [[ $uki =~ "$pkgbase-fallback.efi" ]] && pkgbase="${pkgbase}-fallback"
-
-  local disk esp esp_number label
-  # Get Efi System Partition. Example: /dev/nvme0n1p1
-  esp="$(findmnt --real -nreo source "${ESP_MOUNT}")"
-
-  # Get the found boot partition disk. Example: /dev/nvme0n1
-  disk="/dev/$(lsblk -r -n -o PKNAME "${esp}")"
-
-  # Get Efi System Partition number. Example: For /dev/nvme0n1p1, the number is 1
-  esp_number="$(lsblk -r -n -o KNAME "${esp}")"
-  esp_number="$(</sys/class/block/"${esp_number}"/partition)"
-
   # Set OS label to NAME + (pkgbase): Example: Arch Linux (linux)
-  label="$(_get_label "$pkgbase")"
+  local label
+  label="$(_get_label "$pkgbase" "$uki")"
 
-  $_msg_info "Creating EFI entry ${G}${label}${NC}..."
+  # If entry exists, do not create it
+  if _should_add_entry "$label" "$loader_path"; then
 
-  # Add the EFI entry
-  efibootmgr --create \
-    --disk "${disk}" \
-    --part "${esp_number}" \
-    --index "${index:-0}" \
-    --label "${label}" \
-    --loader "${loader_path^^}" \
-    --unicode -q
+    local disk esp esp_number
+    # Get Efi System Partition. Example: /dev/nvme0n1p1
+    esp="$(findmnt --real -nreo source "${ESP_MOUNT}")"
+
+    # Get the found boot partition disk. Example: /dev/nvme0n1
+    disk="/dev/$(lsblk -r -n -o PKNAME "${esp}")"
+
+    # Get Efi System Partition number. Example: For /dev/nvme0n1p1, the number is 1
+    esp_number="$(lsblk -r -n -o KNAME "${esp}")"
+    esp_number="$(</sys/class/block/"${esp_number}"/partition)"
+
+    $_msg_info "Creating EFI entry ${G}${label}${NC}..."
+
+    # Add the EFI entry
+    efibootmgr --create \
+      --disk "${disk}" \
+      --part "${esp_number}" \
+      --index "${index:-0}" \
+      --label "${label}" \
+      --loader "${loader_path^^}" \
+      --unicode -q
+  fi
+
+  # Remove orphaned EFI entries
+  _remove_orphaned_efi_entries
 }
 
-# Removes the EFI entry
-_remove_efi_entry() {
-  # Return if efibootmgr doesn't exist
-  if ! _command_exists efibootmgr; then return; fi
-
-  local uki loader_path pkgbase
-  uki="$1"
-
-  # Set loader path with backslashes
-  loader_path="$(_get_loader_path "$uki")"
+# Removes the EFI entry for specified loader path
+_remove_efi_entry_by_loader_path() {
+  local loader_path="$1"
 
   # Find all known labels
-  readarray -t labels < <(efibootmgr | \
-    grep -w "$ESP_PARTUUID" | \
-    grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
-    sed 's/.*\*[[:blank:]]\(.*\)[[:blank:]]\(.*\)/\1/')
+  _get_efi_info -l "$loader_path" labels
 
-  # Find all known efibootmgr boot numbers for the specified UKI
-  readarray -t boot_nums < <(efibootmgr | \
-    grep -w "$ESP_PARTUUID" | \
-    grep -Fw -e "$loader_path" -e "${loader_path^^}" | \
-    awk '{ print $1 }' | \
-    sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
+  # Find all known efibootmgr boot numbers for the specified UKI loader path
+  _get_efi_info -n "$loader_path" boot_nums
 
+  # Print the labels 
   for label in "${labels[@]}"; do
     $_msg_warn "Removing EFI entry ${Y}${label}${NC}..."
   done
 
+  # Remove the EFI entries
   for boot_num in "${boot_nums[@]}"; do
     efibootmgr -b "$boot_num" -B > /dev/null
   done
 }
 
+# Removes the EFI entry for specified UKI
+_remove_efi_entry() {
+  # Return if efibootmgr doesn't exist
+  if ! _command_exists efibootmgr; then return; fi
+
+  local uki="$1"
+  local labels boot_nums pkgbase loader_path
+  
+  # Set loader path with backslashes
+  loader_path="$(_get_loader_path "$uki")"
+
+  # Remove the entry for specified loader_path
+  _remove_efi_entry_by_loader_path "$loader_path"
+}
+
 # Removes orphaned EFI entries
 _remove_orphaned_efi_entries() {
-    # Return if efibootmgr doesn't exist
+  # Return if efibootmgr doesn't exist
   if ! _command_exists efibootmgr; then exit; fi
 
-  local search="${EFI_DIR#$ESP_MOUNT}/${os_id}-"
+  # Search pattern
+  # This should be a EFI path
+  local search
+  
+  # Search the paths containing \EFI\Linux\
+  search="${EFI_DIR#"$ESP_MOUNT"}/$(_get_os_id)-"
   search="${search//\//\\}"
 
-  local sed_string
-  local efivar_version="$(pacman -Qi efivar | \
-    grep Version | \
-    sed 's/[^0-9]*\([0-9]\{1,\}\).*/\1/')"
-
-  [[ $efivar_version -ge 39 ]] && sed_string="s/.*)\///" ||
-    sed_string="s/.*(\(.*\))/\1/"
-
   # Get all uniqe loader paths
-  readarray -t loader_paths < <(efibootmgr | \
-    grep -w "$ESP_PARTUUID" | \
-    grep -Fi "$search" | \
-    sed "$sed_string" | \
-    uniq -u)
+  local loader_paths
+  _get_efi_info -p "$search" -u loader_paths
 
   for loader_path in "${loader_paths[@]}"; do
     if ! _loader_file_exists "$loader_path"; then
-      # Get the boot number
-      readarray -t boot_nums < <(efibootmgr | \
-        grep -w "$ESP_PARTUUID" | \
-        grep -Fw "$loader_path" | \
-        awk '{ print $1 }' | \
-        sed -r 's/0+([0-9]+)/\1/g;s/Boot//;s/\*//')
-
-      # Get the labels
-      readarray -t labels < <(efibootmgr | \
-        grep -w "$ESP_PARTUUID" | \
-        grep -Fw "$loader_path" | \
-        sed 's/.*\*[[:blank:]]\(.*\)[[:blank:]]\(.*\)/\1/')
-
-      for label in "${labels[@]}"; do
-        $_msg_warn "Removing EFI entry ${Y}${label}${NC}..."
-      done
-
-      # Remove the EFI entries
-      for boot_num in "${boot_nums[@]}"; do
-        efibootmgr -b "$boot_num" -B > /dev/null
-      done
+      # Remove the entry for specified loader_path
+      _remove_efi_entry_by_loader_path "$loader_path"
     fi
   done
-
-  # One shot function, just exit
-  exit
 }

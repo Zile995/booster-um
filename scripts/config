@@ -19,18 +19,21 @@ declare -g BOOSTER_CONFIG=/etc/booster.yaml
 declare -g arch_splash=/usr/share/systemd/bootctl/splash-arch.bmp
 
 # Checks if booster-um.yaml config is valid
-_check_config() {
-  [[ ! -e $CONFIG ]] && CONFIG_VALID=$((1-$?)) && return
-
-  if [[ ! -s $CONFIG ]]; then
+_init_config() {
+  if [[ ! -e $CONFIG ]]; then
     CONFIG_VALID=1
-  else
-    CONFIG_VALID=$(yq --exit-status "$CONFIG" &>/dev/null; echo "$?")
-    if (( $CONFIG_VALID )); then
-      $_msg_error "${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."
-    fi
+    return
   fi
 
+  if [[ ! -s $CONFIG ]] || ! yq --exit-status . "$CONFIG" 1>/dev/null; then
+    CONFIG_VALID=1
+    $_msg_error "${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."
+    _print_divider
+  else
+    CONFIG_VALID=0
+  fi
+  
+  # shellcheck disable=SC2034
   if ! _should_enable_colors; then
     W="$NC"
     R="$NC"
@@ -44,14 +47,14 @@ _check_config() {
 
 # Sets the default signing tool
 _set_signing_tool() {
-  (( $CONFIG_VALID )) && return
+  (( CONFIG_VALID )) && return
   if _command_exists sbsign && yq '.sbsign == true' "$CONFIG" | grep -Fqwx -- 'true'; then SBSIGN=0; fi
 }
 
 # Checks if colors are enabled
 _should_enable_colors() {
-  [[ -z $colors ]] || return $colors
-  (( $CONFIG_VALID )) && colors=0 && return
+  [[ -z $colors ]] || return "$colors"
+  (( CONFIG_VALID )) && colors=0 && return
   if ! yq '.colors == false' "$CONFIG" | grep -Fqwx -- 'true'; then
    colors=0 && return
   fi
@@ -61,8 +64,8 @@ _should_enable_colors() {
 # Checks if booster should use less memory.
 # Booster should generate initramfs one by one (not in parallel)
 _low_memory() {
-  [[ -z $low_memory ]] || return $low_memory
-  (( $CONFIG_VALID )) && low_memory=1 && return 1
+  [[ -z $low_memory ]] || return "$low_memory"
+  (( CONFIG_VALID )) && low_memory=1 && return 1
   if yq '.low_memory == true' "$CONFIG" | grep -Fqwx -- 'true'; then
    low_memory=0 && return
   fi
@@ -71,8 +74,8 @@ _low_memory() {
 
 # Checks if booster-um should include microcode files.
 _include_microcode() {
-  [[ -z $microcode ]] || return $microcode
-  (( $CONFIG_VALID )) && microcode=0 && return
+  [[ -z $microcode ]] || return "$microcode"
+  (( CONFIG_VALID )) && microcode=0 && return
   if ! yq '.microcode == false' "$CONFIG" | grep -Fqwx -- 'true'; then
    microcode=0 && return
   fi
@@ -86,8 +89,8 @@ _is_universal() {
 
 # Checks if the splash should be enabled
 _should_enable_splash() {
-  [[ -z $enable_splash ]] || return $enable_splash
-  (( $CONFIG_VALID )) && enable_splash=0 && return
+  [[ -z $enable_splash ]] || return "$enable_splash"
+  (( CONFIG_VALID )) && enable_splash=0 && return
   if ! yq '.enable_splash == false' "$CONFIG" | grep -Fqwx -- 'true'; then
    enable_splash=0 && return
   fi
@@ -96,8 +99,8 @@ _should_enable_splash() {
 
 # Checks if the booster-um should always generate a fallback UKI
 _should_generate_fallback() {
-  [[ -z $generate_fallback ]] || return $generate_fallback
-  if (( ! $CONFIG_VALID )); then
+  [[ -z $generate_fallback ]] || return "$generate_fallback"
+  if (( ! CONFIG_VALID )); then
     if yq '.generate_fallback == true' "$CONFIG" | grep -Fqwx -- 'true' || _is_universal; then
       generate_fallback=0 && return
     fi
@@ -109,8 +112,8 @@ _should_generate_fallback() {
 
 # Checks if the booster-um should always sign generated UKI
 _should_sign_uki() {
-  [[ -z $sign_uki ]] || return $sign_uki
-  (( $CONFIG_VALID )) && sign_uki=0 && return
+  [[ -z $sign_uki ]] || return "$sign_uki"
+  (( CONFIG_VALID )) && sign_uki=0 && return
   if ! yq '.sign_uki == false' "$CONFIG" | grep -Fqwx -- 'true'; then
    sign_uki=0 && return
   fi
@@ -119,18 +122,27 @@ _should_sign_uki() {
 
 # Checks if the booster-um should remove leftovers (vmlinuz and initramfs)
 _should_remove_leftovers() {
-  [[ -z $remove_leftovers ]] || return $remove_leftovers
-  (( $CONFIG_VALID )) && remove_leftovers=0 && return
+  [[ -z $remove_leftovers ]] || return "$remove_leftovers"
+  (( CONFIG_VALID )) && remove_leftovers=0 && return
   if ! yq '.remove_leftovers == false' "$CONFIG" | grep -Fqwx -- 'true'; then
     remove_leftovers=0 && return
   fi
   remove_leftovers=1; false
 }
 
+# Returns the UKI file prefix
+_get_os_id() {
+  [[ -n $config_os_id ]] || config_os_id="$(yq ".os_id" "$CONFIG" 2>/dev/null)"
+  if [[ $config_os_id == null || -z $config_os_id ]]; then
+    config_os_id="$(grep -Po '(?<=^ID=).*' /etc/os-release)"
+  fi
+  echo "$config_os_id"
+}
+
 # Checks if the booster-um should create EFI entry
 _should_create_efi_entry() {
-  [[ -z $create_efi_entry ]] || return $create_efi_entry
-  (( $CONFIG_VALID )) && create_efi_entry=1 && return 1
+  [[ -z $create_efi_entry ]] || return "$create_efi_entry"
+  (( CONFIG_VALID )) && create_efi_entry=1 && return 1
   if yq '.efistub == true' "$CONFIG" | grep -Fqwx -- 'true'; then
     create_efi_entry=0 && return
   fi
@@ -139,23 +151,26 @@ _should_create_efi_entry() {
 
 # Returns the default EFI entry
 _get_default_entry() {
-  if [[ -n $default_entry ]]; then
-    echo $default_entry 
-    return
-  fi
-  if (( ${force_default_entry:-1} )); then
-    default_entry="$(yq ".efistub_config.default_entry" "$CONFIG")"
-  else
-    default_entry="${sorted_pkgbases[0]}"
-  fi
-  [[ $default_entry == null ]] && return
+  [[ -n $default_entry ]] || \
+    default_entry="$(yq ".efistub_config.default_entry" "$CONFIG" 2>/dev/null)"
+  [[ $default_entry == null || -z $default_entry ]] && return
   echo "$default_entry"
+}
+
+# Returns the OS name
+_get_os_name() {
+  [[ -n $config_os_name ]] || \
+    config_os_name="$(yq ".efistub_config.os_name" "$CONFIG" 2>/dev/null)"
+  if [[ $config_os_name == null || -z $config_os_name ]]; then
+    config_os_name="$(grep -Po '(?<=^NAME=").*(?=")' /etc/os-release)"
+  fi
+  echo "$config_os_name"
 }
 
 # Checks if the booster-um should append EFI entries to the boot order
 _should_append_entries() {
-  [[ -z $append_entries ]] || return $append_entries
-  (( $CONFIG_VALID )) && append_entries=0 && return
+  [[ -z $append_entries ]] || return "$append_entries"
+  (( CONFIG_VALID )) && append_entries=0 && return
   if ! yq '.efistub_config.append_entries == false' "$CONFIG" | grep -Fqwx -- 'true'; then
     append_entries=0 && return
   fi
@@ -165,8 +180,8 @@ _should_append_entries() {
 # Returns the base cmdline
 _get_config_cmdline() {
   if [[ -z $config_cmdline ]]; then
-    config_cmdline="$(yq ".cmdline" "$CONFIG")"
-    [[ $config_cmdline == null ]] && return
+    config_cmdline="$(yq ".cmdline" "$CONFIG" 2>/dev/null)"
+    [[ $config_cmdline == null || -z $config_cmdline ]] && return
   fi
   echo "$config_cmdline"
 }
@@ -174,8 +189,8 @@ _get_config_cmdline() {
 # Returns the base fallback cmdline
 _get_config_fallback_cmdline() {
   if [[ -z $config_fallback_cmdline ]]; then
-    config_fallback_cmdline="$(yq ".fallback_cmdline" "$CONFIG")"
-    [[ $config_fallback_cmdline == null ]] && return
+    config_fallback_cmdline="$(yq ".fallback_cmdline" "$CONFIG" 2>/dev/null)"
+    [[ $config_fallback_cmdline == null || -z $config_fallback_cmdline ]] && return
   fi
   echo "$config_fallback_cmdline"
 }
@@ -184,24 +199,27 @@ _get_config_fallback_cmdline() {
 _get_config_pkgbase_cmdline() {
   local pkgbase="$1"
   local fallback="$2"
-  local config_cmdline_name
+  local config_cmdline_name config_pkgbase_cmdline
+
+  if (( CONFIG_VALID )); then return; fi
 
   [[ $fallback -eq 1 ]] && config_cmdline_name="cmdline" || config_cmdline_name="fallback_cmdline"
-  local config_pkgbase_cmdline="$(yq ".kernel_config.${pkgbase}.${config_cmdline_name}" "$CONFIG")"
+
+  config_pkgbase_cmdline="$(yq ".kernel_config.${pkgbase}.${config_cmdline_name}" "$CONFIG")"
   
   if [[ $fallback -eq 0 && -z "${config_pkgbase_cmdline// }" ]]; then
     config_pkgbase_cmdline="$(yq ".kernel_config.${pkgbase}.cmdline" "$CONFIG")"
   fi
   
-  [[ $config_pkgbase_cmdline == null ]] && return
+  if [[ $config_pkgbase_cmdline == null ]]; then return; fi
 
   echo "$config_pkgbase_cmdline"
 }
 
 # Checks if the default cmdline should be shared with the pkgbase cmdlines
 _should_share_default_cmdline() {
-  [[ -z $share_default_cmdline ]] || return $share_default_cmdline
-  (( $CONFIG_VALID )) && share_default_cmdline=1 && return 1
+  [[ -z $share_default_cmdline ]] || return "$share_default_cmdline"
+  (( CONFIG_VALID )) && share_default_cmdline=1 && return 1
   if yq '.kernel_config.share_default_cmdline == true' "$CONFIG" | grep -Fqwx -- 'true'; then
     share_default_cmdline=0 && return
   fi
@@ -210,8 +228,8 @@ _should_share_default_cmdline() {
 
 # Checks if the booster-um should create cmdline per kernel
 _cmdline_per_kernel() {
-  [[ -z $cmdline_per_kernel ]] || return $cmdline_per_kernel
-  (( $CONFIG_VALID )) && cmdline_per_kernel=1 && return 1
+  [[ -z $cmdline_per_kernel ]] || return "$cmdline_per_kernel"
+  (( CONFIG_VALID )) && cmdline_per_kernel=1 && return 1
   if yq '.kernel_config.cmdline_per_kernel == true' "$CONFIG" | grep -Fqwx -- 'true'; then
     cmdline_per_kernel=0 && return
   fi
@@ -221,16 +239,18 @@ _cmdline_per_kernel() {
 # Returns the pkgbase booster config
 _get_booster_config() {
   local pkgbase="$1"
-  local booster_config="$(yq ".kernel_config.${pkgbase}.booster_config" "$CONFIG")"
-  [[ $booster_config == null ]] && return
+  local booster_config
+  booster_config="$(yq ".kernel_config.${pkgbase}.booster_config" "$CONFIG" 2>/dev/null)"
+  [[ $booster_config == null || -z $booster_config ]] && return
   echo "$booster_config"
 }
 
 # Returns the sbsign property value
 _get_sbsign_property() {
-  local property="$1"
-  local value="$(yq ".sbsign_config.$property" "$CONFIG")"
-  [[ $value == null ]] && return
+  local property="$1" 
+  local value
+  value="$(yq ".sbsign_config.$property" "$CONFIG" 2>/dev/null)"
+  [[ $value == null || -z $value ]] && return
   echo "$value"
 }
 
@@ -257,11 +277,21 @@ _has_fallback_initramfs() {
 # Gets the default initramfs types
 _get_default_initramfs_types() {
   local -n initramfs_types="$1"
-  readarray initramfs_types < <(yq ".kernel_config.default_initramfs[]" "$CONFIG");
+
+  if (( CONFIG_VALID )); then
+    initramfs_types=(default fallback)
+    return
+  fi
+
+  readarray initramfs_types < <(yq ".kernel_config.default_initramfs[]" "$CONFIG")
+  if (( ${#initramfs_types[@]} == 0 )); then
+    initramfs_types=(default fallback)
+    return
+  fi
+    
   if [[ ! "${initramfs_types[*]}" =~ "default" && "${initramfs_types[*]}" =~ "fallback" ]] && ! _should_generate_fallback; then
     initramfs_types=(default)
   fi
-  [[ ${#initramfs_types[@]} -eq 0 ]] && initramfs_types=(default fallback) || :
 }
 
 # Sets the initramfs config for all kernels
@@ -269,23 +299,25 @@ _set_initramfs_config() {
   local -a value=()
   for pkgbase in "${sorted_pkgbases[@]}"; do
     # Get the initramfs type array for specified kernel pkgbase
-    readarray value < <(yq ".kernel_config.${pkgbase}.initramfs[]" "$CONFIG");
+    readarray value < <(yq ".kernel_config.${pkgbase}.initramfs[]" "$CONFIG")
 
-    # Get booster config
-    local booster_config="$(_get_booster_config "$pkgbase")"
+    # If the kernel is not specified, use the default initramfs
+    if (( CONFIG_VALID || ${#value[@]} == 0 )); then
+      _get_default_initramfs_types value
+    else
+      # Get booster config
+      local booster_config
+      booster_config="$(_get_booster_config "$pkgbase")"
 
-    # If fallback images should not be generated and there is only fallback type, create the default image
-    if _is_universal || [[ $booster_config =~ "universal: true" ]]; then
-      value=(fallback)
-    elif [[ ! "${value[*]}" =~ "default" && "${value[*]}" =~ "fallback" ]] && ! _should_generate_fallback; then
-      value=(default)
+      # If fallback images should not be generated and there is only fallback type, create the default image
+      if _is_universal || [[ $booster_config =~ "universal: true" ]]; then
+        value=(fallback)
+      elif [[ ! "${value[*]}" =~ "default" && "${value[*]}" =~ "fallback" ]] && ! _should_generate_fallback; then
+        value=(default)
+      fi
     fi
-
-    # If the kernel is not specified, use the value for other kernels
-    [[ ${#value[@]} -eq 0 ]] && _get_default_initramfs_types value || :
-
     # Save the initramfs config for specified kernel pkgbase
-    initramfs_config["$pkgbase"]="${value[@]}"
+    initramfs_config["$pkgbase"]="${value[*]}"
   done
 }
 
@@ -298,10 +330,11 @@ _get_splash_path() {
   _should_enable_splash || return 0
 
   # If the config file doesn't exist or is not valid, use the default arch linux splash
-  if (( $CONFIG_VALID )); then echo "$arch_splash" && return; fi
+  if (( CONFIG_VALID )); then echo "$arch_splash" && return; fi
 
   # Set the pkgbase splash path from the config file
-  local pkgbase_splash="$(yq ".kernel_config.${pkgbase}.splash" "$CONFIG")"
+  local pkgbase_splash
+  pkgbase_splash="$(yq ".kernel_config.${pkgbase}.splash" "$CONFIG")"
 
   # Return if pkgbase splash is set to false
   if [[ $pkgbase_splash == "false" || -z $pkgbase_splash ]]; then
@@ -313,7 +346,8 @@ _get_splash_path() {
   # If the pkgbase splash is empty, try the main splash path
   if [[ $pkgbase_splash == null ]]; then
     # Set the default splash path from the config file
-    local default_splash="$(yq '.kernel_config.default_splash' "$CONFIG")"
+    local default_splash
+    default_splash="$(yq '.kernel_config.default_splash' "$CONFIG")"
 
     # Return if main splash is set to false
     if [[ $default_splash == "false" || -z $default_splash ]]; then

@@ -28,8 +28,8 @@ main() {
       ;;
   esac
 
-  # Check booster-um config
-  _check_config
+  # Init booster-um config
+  _init_config
 
   # EFI dir path
   _set_efi_path

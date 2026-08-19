@@ -38,10 +38,12 @@ _remove_boot_leftovers() {
 # Removes other leftovers (efi entries, cmdlines, fallback images)
 _remove_other_leftovers() {
   local pkgbase="$1"
+  local os_id uki fallback_uki booster_config
 
-  local uki="${EFI_DIR}/${os_id}-${pkgbase}.efi"
-  local fallback_uki="${EFI_DIR}/${os_id}-${pkgbase}-fallback.efi"
-  local booster_config="$(_get_booster_config "$pkgbase")"
+  os_id="$(_get_os_id)"
+  uki="${EFI_DIR}/${os_id}-${pkgbase}.efi"
+  fallback_uki="${EFI_DIR}/${os_id}-${pkgbase}-fallback.efi"
+  booster_config="$(_get_booster_config "$pkgbase")"
 
   # Remove fallback UKI files in ESP if fallback generation is not enabled
   if [[ ! $booster_config =~ "universal: true" ]] && \
@@ -137,17 +139,24 @@ _remove_uki() {
   local -a input_pkgbases
   readarray -t input_pkgbases < <(printf '%s\n' "$@" | sort -u)
 
+  local fail_count=0
+  
   divider=1
 
   for pkgbase in "${input_pkgbases[@]}"; do
-    # Check the pkgbase
-    _check_pkgbase "$pkgbase" || continue
+    if ! _check_pkgbase "$pkgbase"; then
+      fail_count=$((fail_count + 1))
+      continue
+    fi
 
     _print_divider
     $_msg_h2_warn "Removing UKI for ${G}${pkgbase} (${kernels[$pkgbase]})${NC}..."
 
     # Remove leftovers from /boot dir
     _remove_boot_leftovers "$pkgbase"
+
+    local os_id
+    os_id="$(_get_os_id)"
 
     # Store all UKI files in array
     readarray -t uki_files < <(find "${EFI_DIR}" \
@@ -172,4 +181,8 @@ _remove_uki() {
 
     divider=0
   done
+
+  if [[ $fail_count -eq ${#input_pkgbases[@]} ]]; then
+    exit 1
+  fi
 }

@@ -18,7 +18,8 @@ _generate_uki() {
   VMLINUZ="/boot/vmlinuz-${pkgbase}"
 
   # Get booster config for the pkgbase
-  local booster_config="$(_get_booster_config "$pkgbase")"
+  local booster_config
+  booster_config="$(_get_booster_config "$pkgbase")"
 
   # booster initramfs
   local -a booster_inits=()
@@ -34,8 +35,11 @@ _generate_uki() {
   fi
 
   # Fix the initramfs file permissions if necessary
-  [[ ! $(stat -c %a "${booster_inits[@]}" | grep -w "600" | wc -l) -eq "${#booster_inits[@]}" ]] &&
+  local match_count
+  match_count=$(stat -c %a "${booster_inits[@]}" | grep -cw "600")
+  if (( match_count != ${#booster_inits[@]} )); then
     chmod -f 600 -- "${booster_inits[@]}"
+  fi
 
   # splash file
   SPLASH="$(_get_splash_path "$pkgbase")"
@@ -48,15 +52,18 @@ _generate_uki() {
 
   # UKI file path, create EFI dir if it doesn't exist
   [[ ! -d $EFI_DIR ]] && mkdir -p "$EFI_DIR"
-  local uki_path="${EFI_DIR}/${os_id}-${pkgbase}"
+  local os_id uki_path
+  os_id="$(_get_os_id)"
+  uki_path="${EFI_DIR}/${os_id}-${pkgbase}"
 
   local -a sign_args=()
   if [[ $SBSIGN -eq 0 ]] && _should_sign_uki; then
-    local pcr_banks="$(_get_sbsign_property pcr_banks)"
-    local pcr_private_key="$(_get_sbsign_property pcr_private_key)"
-    local pcr_public_key="$(_get_sbsign_property pcr_public_key)"
-    local secureboot_private_key="$(_get_sbsign_property secureboot_private_key)"
-    local secureboot_certificate="$(_get_sbsign_property secureboot_certificate)"
+    local pcr_banks pcr_private_key pcr_public_key secureboot_private_key secureboot_certificate
+    pcr_banks="$(_get_sbsign_property pcr_banks)"
+    pcr_private_key="$(_get_sbsign_property pcr_private_key)"
+    pcr_public_key="$(_get_sbsign_property pcr_public_key)"
+    secureboot_private_key="$(_get_sbsign_property secureboot_private_key)"
+    secureboot_certificate="$(_get_sbsign_property secureboot_certificate)"
 
     sign_args+=(${pcr_banks:+"--pcr-banks=$pcr_banks"} \
                 ${pcr_private_key:+"--pcr-private-key=$pcr_private_key"} \
@@ -73,11 +80,13 @@ _generate_uki() {
     cat -- "${microcodes[@]}" "$booster_initramfs" > "$INITRD"
 
     # Set UKI fallback path
-    [[ $booster_initramfs =~ "$pkgbase-fallback.img" ]] && 
-      uki_path="${uki_path}-fallback" && local fallback=0
+    if [[ $booster_initramfs == *"$pkgbase-fallback.img"* ]]; then
+      uki_path="${uki_path}-fallback"
+      local fallback=0
+    fi
 
     # cmdline file path or cmdline kernel parameters
-    CMDLINE="$(_get_cmdline $pkgbase "${fallback:-1}")"
+    CMDLINE="$(_get_cmdline "$pkgbase" "${fallback:-1}")"
 
     # Set the UKI file with .efi exstension
     UKI="${uki_path}.efi"
@@ -115,8 +124,13 @@ _generate_kernel_uki() {
   # First remove all failed .booster initramfs
   rm -f /boot/.booster-*.img*
 
+  local fail_count=0
+
   for pkgbase in "${input_pkgbases[@]}"; do
-    _check_pkgbase "$pkgbase" || continue
+    if ! _check_pkgbase "$pkgbase"; then
+      fail_count=$((fail_count + 1))
+      continue
+    fi
 
     # Add the valid pkgbase
     valid_pkgbases+=("$pkgbase")
@@ -146,6 +160,10 @@ _generate_kernel_uki() {
     # Generate and sign the UKI file
     _generate_uki "$pkgbase" "$uname"
   done
+
+  if [[ $fail_count -eq ${#input_pkgbases[@]} ]]; then
+    exit 1
+  fi
 }
 
 # Generate initramfs for specified kernel path
@@ -159,18 +177,21 @@ _generate_initramfs() {
   if ! _install_vmlinuz "$pkgbase" "$uname"; then return 1; fi
 
   if _has_default_initramfs "$pkgbase"; then
+    local initramfs booster_config
+    local -a booster_args
+
     # Set the booster initramfs file path
-    local initramfs="/boot/booster-${pkgbase}.img"
+    initramfs="/boot/booster-${pkgbase}.img"
 
     # Get booster config
-    local booster_config="$(_get_booster_config "$pkgbase")"
+    booster_config="$(_get_booster_config "$pkgbase")"
 
     # Set booster args
-    local -a booster_args=(build \
-                           --force \
-                           ${booster_config:+"--config=/dev/stdin"} \
-                           --kernel-version "$uname" \
-                          "$initramfs")
+    booster_args=(build \
+                  --force \
+                  ${booster_config:+"--config=/dev/stdin"} \
+                  --kernel-version "$uname" \
+                  "$initramfs")
 
     # Generate initramfs
     if ! echo "$booster_config" | booster "${booster_args[@]}"; then
@@ -210,7 +231,8 @@ _install_vmlinuz() {
 _generate_fallback_initramfs() {
   local pkgbase="$1"
 
-  local booster_config="$(_get_booster_config "$pkgbase")"
+  local booster_config
+  booster_config="$(_get_booster_config "$pkgbase")"
 
   if [[ ! $booster_config =~ "universal: true" ]]; then
     if ! _should_generate_fallback || ! _has_fallback_initramfs "$pkgbase"; then

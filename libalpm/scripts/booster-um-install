@@ -8,48 +8,27 @@ declare -g SIGN_ALL=1
 # Generate all UKI files
 declare -g ALL=1
 
-# Associative array with the kernel package name as the key and uname as the value
+# Set of kernel unames/paths
 declare -A kernels
 
 # An array of sorted pkgbases
 declare -a sorted_pkgbases=()
 
-add_kernel() {
-  local file="$1"
-  local kernel_dir pkgbase modules_suffix
-
-  # Get the uname
-  modules_suffix="${file##usr/lib/modules/}"
-  uname="${modules_suffix%%/*}"
-  kernel_dir="/usr/lib/modules/${uname}"
-
-  # If pkgbase does not belong to any package then skip this kernel
-  if ! pacman -Qqo -- "${kernel_dir}/pkgbase" > /dev/null 2>&1; then return; fi
-
-  # Return if there is a pkgbase key
-  read -r pkgbase < "${kernel_dir}/pkgbase"
-  [[ ! -v kernels[$pkgbase] ]] || return
-
-  # Assign the uname value for kernel pkgbase
-  kernels["$pkgbase"]="$uname"
-}
-
 while read -r line; do
   case "$line" in
     usr/bin/booster | usr/bin/booster-um | usr/bin/ukify)
       SIGN_ALL=0
-      break
       ;;
     usr/lib/booster/* | usr/lib/firmware/* | usr/src/*/dkms.conf)
       SIGN_ALL=0
-      break
       ;;
     usr/lib/modules/*/vmlinuz | usr/lib/modules/*/extramodules/*)
-      add_kernel "$line"
+      modules_suffix="${line#usr/lib/modules/}"
+      uname="${modules_suffix%%/*}"
+      kernels["$uname"]=1
       ;;
     *)
       ALL=0
-      break
       ;;
   esac
 done
@@ -58,13 +37,25 @@ done
 if [[ $SIGN_ALL -eq 0 ]]; then booster-um -G; exit; fi
 
 # Sbctl hook should sign the UKI file if it already exists in database
+# Disable the signing inside the booster-um
 export ALWAYS_SIGN=1
 
 # Generate UKI files for all kernels
 if [[ $ALL -eq 0 ]]; then booster-um -G; exit; fi
 
-# Sort the pkgbases
-readarray -t sorted_pkgbases < <(printf '%s\n' "${!kernels[@]}" | sort)
+# Get the sorted pkgbases
+mapfile -t sorted_pkgbases < <(
+  for uname in "${!kernels[@]}"; do
+    kernel_dir="/usr/lib/modules/${uname}"
+
+    if ! pacman -Qqo -- "${kernel_dir}/pkgbase" > /dev/null 2>&1; then
+      continue
+    fi
+
+    read -r pkgbase < "${kernel_dir}/pkgbase"
+    printf '%s\n' "$pkgbase"
+  done | sort
+)
 
 # Genearate UKI files for updated kernels
 booster-um -u "${sorted_pkgbases[@]}"

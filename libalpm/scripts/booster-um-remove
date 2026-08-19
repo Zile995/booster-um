@@ -2,41 +2,48 @@
 
 set -e
 
-# Associative array with the kernel package name as the key
+# Remove all UKI files
+declare -g REMOVE_ALL=1
+
+# Set of kernel unames/paths
 declare -A kernels
 
 # An array of sorted pkgbases
 declare -a sorted_pkgbases=()
 
-add_kernel() {
-  local kernel_dir="$1"
-  local pkgbase
-
-  # If pkgbase does not belong to any package then skip this kernel
-  if ! pacman -Qqo "${kernel_dir}/pkgbase" > /dev/null 2>&1; then return; fi
-
-  # Return if there is a pkgbase key
-  read -r pkgbase < "${kernel_dir}/pkgbase"
-  [[ ! -v kernels[$pkgbase] ]] || return
-
-  # Assign the uname value for kernel pkgbase
-  kernels["$pkgbase"]="$kernel_dir"
-}
-
 while read -r line; do
   case "$line" in
     usr/bin/booster-um)
-      booster-um -R
-      exit
+      REMOVE_ALL=0
       ;;
     usr/lib/modules/*/vmlinuz)
-      add_kernel "/${line%/vmlinuz}"
+      modules_suffix="${line#usr/lib/modules/}"
+      uname="${modules_suffix%/vmlinuz}"
+      kernels["$uname"]=1
       ;;
   esac
 done
 
-# Sort the pkgbases
-readarray -t sorted_pkgbases < <(printf '%s\n' "${!kernels[@]}" | sort)
+if [[ $REMOVE_ALL -eq 0 ]]; then
+  booster-um -R
+  exit 0
+fi
+
+# Get sorted pkgbases
+mapfile -t sorted_pkgbases < <(
+  for uname in "${!kernels[@]}"; do
+    kernel_dir="/usr/lib/modules/${uname}"
+
+    if ! pacman -Qqo -- "${kernel_dir}/pkgbase" > /dev/null 2>&1; then
+      continue
+    fi
+
+    if [[ -f "${kernel_dir}/pkgbase" ]]; then
+      read -r pkgbase < "${kernel_dir}/pkgbase"
+      printf '%s\n' "$pkgbase"
+    fi
+  done | sort
+)
 
 # Remove UKI for specified kernels
 export REMOVE_EFI=1; booster-um -r "${sorted_pkgbases[@]}"

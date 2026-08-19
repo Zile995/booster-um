@@ -22,7 +22,7 @@ main() {
       exit 0
       ;;
     *)
-      (( $EUID )) &&
+      (( EUID )) &&
         $_msg_error "Please run booster-um as ${R}root${NC}." &&
         exit 1
       ;;

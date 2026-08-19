@@ -107,7 +107,7 @@ _loader_file_exists() {
 # _get_efi_info <type> [<pattern>] [-u] <result_var>
 # Params:
 #   <type>       : -n (boot numbers), -l (labels), -p (paths), -o (boot order)
-#   <pattern>: Required for -n, -l, -p; not used with -o
+#   <pattern>    : Search pattern, required for -n, -l, -p; not used with -o
 #   -u           : Optional; return unique results
 #   <result_var> : Name of array variable to store results (passed by name)
 _get_efi_info() {
@@ -173,7 +173,7 @@ _get_efi_info() {
       # Get all labels for specified loader path
       readarray -t result < <(efibootmgr | \
         grep -w "$ESP_PARTUUID" | grep -Fw -e "$pattern" -e "${pattern^^}" | \
-        sed 's/.*\*[[:blank:]]\(.*\)[[:blank:]]\(.*\)/\1/')
+        sed -r 's/^Boot[0-9A-Fa-f]+\*[[:space:]]*(.*)[[:space:]]+HD\(.*$/\1/')
       ;;
     -p)
       # Get all loader paths for specified loader path
@@ -375,13 +375,13 @@ _remove_efi_entry() {
 # Removes orphaned EFI entries
 _remove_orphaned_efi_entries() {
   # Return if efibootmgr doesn't exist
-  if ! _command_exists efibootmgr; then exit; fi
+  if ! _command_exists efibootmgr || ! _should_create_efi_entry; then exit; fi
 
   # Search pattern
   # This should be a EFI path
   local search
   
-  # Search the paths containing \EFI\Linux\
+  # Search the paths containing esp\EFI\Linux\${os_id}-
   search="${EFI_DIR#"$ESP_MOUNT"}/$(_get_os_id)-"
   search="${search//\//\\}"
 

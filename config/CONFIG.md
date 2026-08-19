@@ -6,12 +6,13 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
  sign_uki: true
  sbsign: false
  colors: true
- efistub: true
+ efistub: false
  microcode: true
  low_memory: false
  enable_splash: true
  remove_leftovers: true
- generate_fallback: true
+ generate_fallback: false
+ os_id: "arch"
 
  cmdline: >
    root=LABEL=arch_root
@@ -64,12 +65,12 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
 sign_uki: true
 sbsign: false
 colors: true
-efistub: true
+efistub: false
 microcode: true
 low_memory: false
 enable_splash: true
 remove_leftovers: true
-generate_fallback: true
+generate_fallback: false
 
 cmdline: >
   root=LABEL=arch_root
@@ -96,6 +97,8 @@ fallback_cmdline: "root=LABEL=arch_root rw"
 * `remove_leftovers` manages the removal of leftovers when generating the UKI files. Besides the vmlinuz and booster files: EFI entries, fallback images and kernel cmdlines are treated as leftovers. They will be removed if `efistub`, `cmdline_per_kernel` or `generate_fallback` options are disabled. If enabled, leftovers will always be removed after generating UKI files. Leftovers will always be removed if you manually delete the UKI for the specified kernel or all installed kernels (`booster-um -r <package>` or `booster-um -R`/`booster-um -C`). If it is not specified, its value is set to `true`
 
 * `generate_fallback` manages the creation of fallback (universal) UKI files. Only fallback images will be generated if `universal` flag is enabled in the `/etc/booster.yaml` config. If it is not specified, its value is set to `false`
+
+* `os_id` sets a custom OS identifier prefix for UKI filenames (`\EFI\Linux\<os_id>-<kernel_package>.efi`). If not set, the value of `ID` from `/etc/os-release` (e.g., `arch`) is used as the default. This option defines the prefix appended before the kernel package name in generated Unified Kernel Image (UKI) filenames: (e.g. \EFI\Linux\/**arch**-linux.efi )
 
 * `cmdline` is the default kernel cmdline and is used by **all** kernels. If `cmdline` is not defined here, booster-um will try to use the cmdline from `/etc/kernel/cmdline` file. If cmdline is not defined neither in the config nor in the `/etc/kernel/cmdline` file, the current cmdline from `/proc/cmdline` will be used. Kernel parameters can be written in multiple lines after the `>` sign. For example:
   ```YAML
@@ -166,7 +169,7 @@ Also, you can write kernel parameters in multiple lines inside the cmdline files
       * `/etc/kernel/cmdline` 
       If cmdline doesn't exist neither in the config nor in the mentioned files, booster-um will try to use the current cmdline from `/proc/cmdline`
 
-    * `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If cmdline is not defined here, booster-um will try to use the default cmdline for `$pkgbase`. If $pkgbase cmdlines are not defined, booster-um will try to use the default cmdlines in the config file, outside the `kernel_config` node (first `fallback_cmdline`, `then cmdline`). If these cmdlines are not defined in the config file, booster-um will try to use the cmdline from files in this order:
+    * `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If cmdline is not defined here, booster-um will try to use the default cmdline for `$pkgbase`. If $pkgbase cmdlines are not defined, booster-um will try to use the default cmdlines in the config file, outside the `kernel_config` node (first `fallback_cmdline`, then `cmdline`). If these cmdlines are not defined in the config file, booster-um will try to use the cmdline from files in this order:
       * `/etc/kernel/$pkgbase-cmdline-fallback` 
       * `/etc/kernel/$pkgbase-cmdline` 
       * `/etc/kernel/cmdline-fallback` 
@@ -188,11 +191,13 @@ Also, you can write kernel parameters in multiple lines inside the cmdline files
 ```YAML
 efistub_config:
  default_entry: linux
+ os_name: "Arch Linux"
  append_entries: true
 ```
 
 * `efistub_config` node provides additional efistub configuration:
   * `default_entry` makes sure that the EFI entry of the **specified** kernel is the first in the EFI boot order. If fallback UKI is generated for the specified kernel, its EFI entry will be added after the default entry. After changing its value, it is enough to regenerate all images (`booster-um -G`)  
+  * `os_name` sets a custom OS display name prefix for EFI boot entry labels (`<os_name> (<kernel_package>)`). If not set, the value of `NAME` from `/etc/os-release` (e.g., `Arch Linux`) is used as the default. This option defines the OS display name prefix that appears before the kernel package name in EFI boot entry labels (e.g., **Arch Linux** (linux), **My Arch** (linux))
   * `append_entries` takes care of where new EFI entries will be added to the boot order. If enabled , **newly** created EFI entries will be added to the end of the boot order, otherwise they will be added to the beginning. If it is not specified, its value is set to `true`
 
 ## sbsign config

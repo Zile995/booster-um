@@ -25,14 +25,19 @@ _remove_cmdline() {
 
 # Removes the leftovers from /boot
 _remove_boot_leftovers() {
-  local pkgbase="$1"
+  local -a pkgbases=("$@")
 
-  $_msg_warn "Removing ${G}${pkgbase}${NC} leftovers from ${Y}/boot${NC}..."
+  # Remove failed booster images
+  rm -f /boot/.booster-*.img*
 
-  # Remove leftovers from /boot dir
-  rm -f /boot/.booster*
-  rm -f /boot/vmlinuz-"${pkgbase}"
-  rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
+  if ! _should_remove_leftovers; then return; fi
+
+  for pkgbase in "${pkgbases[@]}"; do 
+    $_msg_warn "Removing ${G}${pkgbase}${NC} leftovers from ${Y}/boot${NC}..."
+    # Remove leftovers from /boot dir
+    rm -f /boot/vmlinuz-"${pkgbase}"
+    rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
+  done
 }
 
 # Removes other leftovers (efi entries, cmdlines, fallback images)
@@ -109,7 +114,7 @@ _cleanup() {
   _print_divider
 
   # Remove all initramfs-*, booster-*, vmlinuz-* files
-  rm -f /boot/{.initrd,initramfs,booster,vmlinuz}*
+  rm -f /boot/{.initrd,initramfs,.booster,booster,vmlinuz}*
 
   # Store all EFI files in array
   local efi_files=("${EFI_DIR}"/*.efi)

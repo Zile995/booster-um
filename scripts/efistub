@@ -263,6 +263,7 @@ _create_efi_entry() {
   if ! _command_exists efibootmgr || ! _should_create_efi_entry; then return; fi
 
   local index=0
+  local status=0
   local uki pkgbase loader_path default_entry
   uki="$1"
   pkgbase="$2"
@@ -323,17 +324,21 @@ _create_efi_entry() {
     $_msg_info "Creating EFI entry ${G}${label}${NC}..."
 
     # Add the EFI entry
-    efibootmgr --create \
-      --disk "${disk}" \
-      --part "${esp_number}" \
-      --index "${index:-0}" \
-      --label "${label}" \
-      --loader "${loader_path^^}" \
-      --unicode -q
+    if ! efibootmgr --create \
+        --disk "${disk}" \
+        --part "${esp_number}" \
+        --index "${index:-0}" \
+        --label "${label}" \
+        --loader "${loader_path^^}" \
+        --unicode -q; then
+        $_msg_error "Unable to create EFI entry ${R}${label}${NC}..."
+        status=1
+    fi
   fi
 
-  # Remove orphaned EFI entries
   _remove_orphaned_efi_entries
+
+  return "$status"
 }
 
 # Removes the EFI entry for specified loader path

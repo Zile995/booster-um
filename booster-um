@@ -22,9 +22,10 @@ main() {
       exit 0
       ;;
     *)
-      (( EUID )) &&
-        $_msg_error "Please run booster-um as ${R}root${NC}." &&
+      if (( EUID )); then
+        $_msg_error "Please run booster-um as ${R}root${NC}."
         exit 1
+      fi
       ;;
   esac
 
@@ -122,6 +123,7 @@ show_version() {
 
 # Source all helper scripts
 for script in /usr/share/booster-um/*; do
+   # shellcheck disable=SC1090
    . "$script"
 done
 

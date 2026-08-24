@@ -59,7 +59,7 @@ _msg() {
   if (( ${msg_indent:-1} )); then
     echo -e "$message"
   else
-    echo -e "$message" | nl -bn -w1
+    echo -e "$message" | sed 's/^/  /'
   fi
 }
 

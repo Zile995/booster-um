@@ -12,11 +12,11 @@ declare -g CONFIG_VALID=0
 declare -A initramfs_config
 
 # Configs
-declare -g CONFIG=/etc/booster-um.yaml
-declare -g BOOSTER_CONFIG=/etc/booster.yaml
+readonly CONFIG=/etc/booster-um.yaml
+readonly BOOSTER_CONFIG=/etc/booster.yaml
 
 # Set the default Arch Linux splash
-declare -g arch_splash=/usr/share/systemd/bootctl/splash-arch.bmp
+readonly arch_splash=/usr/share/systemd/bootctl/splash-arch.bmp
 
 # Checks if booster-um.yaml config is valid
 _init_config() {

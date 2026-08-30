@@ -2,7 +2,7 @@
 
 set -e
 
-declare -g current_cmdline_path="/proc/cmdline"
+readonly current_cmdline_path="/proc/cmdline"
 
 # Returns current kernel cmdline
 _get_current_cmdline() {

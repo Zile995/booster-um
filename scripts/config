@@ -22,12 +22,10 @@ readonly arch_splash=/usr/share/systemd/bootctl/splash-arch.bmp
 _init_config() {
   if [[ ! -e $CONFIG ]]; then
     CONFIG_VALID=1
-    return
-  fi
-
-  if [[ ! -s $CONFIG ]] || ! yq --exit-status . "$CONFIG" 1>/dev/null; then
+    $_msg_error "${Y}$CONFIG${NC} config file ${R}doesn't exist${NC}. ${Y}Default${NC} config is used."
+  elif  [[ ! -s $CONFIG ]] || ! yq --exit-status . "$CONFIG" 1>/dev/null; then
     CONFIG_VALID=1
-    $_msg_error "${Y}$CONFIG${NC} config ${R}is not valid${NC}. ${Y}Default${NC} settings are used."
+    $_msg_error "${Y}$CONFIG${NC} config file ${R}is empty or not valid${NC}. ${Y}Default${NC} config is used."
     _print_divider
   else
     CONFIG_VALID=0
@@ -55,10 +53,11 @@ _set_signing_tool() {
 _should_enable_colors() {
   [[ -z $colors ]] || return "$colors"
   (( CONFIG_VALID )) && colors=0 && return
-  if ! yq '.colors == false' "$CONFIG" | grep -Fqwx -- 'true'; then
-   colors=0 && return
+  if yq -e '.colors == true' "$CONFIG" &> /dev/null; then
+    colors=0; return
+  else
+    colors=1; false
   fi
-  colors=1; false
 }
 
 # Checks if booster should use less memory.
@@ -137,6 +136,16 @@ _get_os_id() {
     config_os_id="$(grep -Po '(?<=^ID=).*' /etc/os-release)"
   fi
   echo "$config_os_id"
+}
+
+# Checks if the booster-um should create EFI entry
+_should_append_machine_id() {
+  [[ -z $append_machine_id ]] || return "$append_machine_id"
+  (( CONFIG_VALID )) && append_machine_id=1 && return 1
+  if yq '.append_machine_id == true' "$CONFIG" | grep -Fqwx -- 'true'; then
+    append_machine_id=0 && return
+  fi
+  append_machine_id=1; false
 }
 
 # Checks if the booster-um should create EFI entry
@@ -336,30 +345,29 @@ _get_splash_path() {
   local pkgbase_splash
   pkgbase_splash="$(yq ".kernel_config.${pkgbase}.splash" "$CONFIG")"
 
-  # Return if pkgbase splash is set to false
+  # Disable if pkgbase splash is set to false or empty ('', "")
   if [[ $pkgbase_splash == "false" || -z $pkgbase_splash ]]; then
     return
-  else
+  # Set custom pkgbase splash if present and not null
+  elif [[ $pkgbase_splash != "null" ]]; then
     splash="$pkgbase_splash"
-  fi
-
-  # If the pkgbase splash is empty, try the main splash path
-  if [[ $pkgbase_splash == null ]]; then
-    # Set the default splash path from the config file
+  # Fallback to global default splash settings
+  else
     local default_splash
     default_splash="$(yq '.kernel_config.default_splash' "$CONFIG")"
 
-    # Return if main splash is set to false
+    # Disable if default splash is set to false or empty ('', "")
     if [[ $default_splash == "false" || -z $default_splash ]]; then
       return
+    # Set custom default splash if present and not null
+    elif [[ $default_splash != "null" ]]; then
+      splash="$default_splash"
+    # Use default Arch Linux splash if omitted entirely from config
     else
-      splash=$default_splash
+      splash="$arch_splash"
     fi
-
-    # If splash path is not specified or does not exist, use the default arch linux splash
-    if [[ $default_splash == null || ! -e $default_splash ]]; then splash="$arch_splash"; fi
   fi
 
-  # Finally, return the splash path if the splash is a BMP file
+  # Validate if the selected file is a BMP, otherwise use the Arch fallback
   if _is_bmp "$splash"; then echo "$splash"; else echo "$arch_splash"; fi
 }

@@ -33,7 +33,7 @@ _remove_boot_leftovers() {
   if ! _should_remove_leftovers; then return; fi
 
   for pkgbase in "${pkgbases[@]}"; do 
-    $_msg_warn "Removing ${G}${pkgbase}${NC} leftovers from ${Y}/boot${NC}..."
+    $_msg_warn "Removing ${Y}${pkgbase}${NC} leftovers from /boot..."
     # Remove leftovers from /boot dir
     rm -f /boot/vmlinuz-"${pkgbase}"
     rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
@@ -160,14 +160,21 @@ _remove_uki() {
     # Remove leftovers from /boot dir
     _remove_boot_leftovers "$pkgbase"
 
-    local os_id
+    local os_id uki_name
     os_id="$(_get_os_id)"
+    uki_name="${os_id}-${pkgbase}"
+
+    if _should_append_machine_id; then
+      local machine_id
+      read -r machine_id < /etc/machine-id
+      uki_name="${uki_name}-${machine_id}"
+    fi
 
     # Store all UKI files in array
     readarray -t uki_files < <(find "${EFI_DIR}" \
       -type f \
-      -name "${os_id}-${pkgbase}.efi" -o \
-      -name "${os_id}-${pkgbase}-fallback.efi" 2> /dev/null)
+      -name "${uki_name}.efi" -o \
+      -name "${uki_name}-fallback.efi" 2> /dev/null)
 
     for uki in "${uki_files[@]}"; do
       # Remove the UKI file from sbctl database
@@ -184,6 +191,7 @@ _remove_uki() {
       if [[ $REMOVE_EFI -eq 0 ]]; then _remove_efi_entry "$uki"; fi
     done
 
+    # shellcheck disable=SC2034
     divider=0
   done
 

@@ -56,6 +56,12 @@ _generate_uki() {
   os_id="$(_get_os_id)"
   uki_path="${EFI_DIR}/${os_id}-${pkgbase}"
 
+  if _should_append_machine_id; then
+    local machine_id
+    read -r machine_id < /etc/machine-id
+    uki_path="${uki_path}-${machine_id}"
+  fi
+
   local -a sign_args=()
   if [[ $SBSIGN -eq 0 ]] && _should_sign_uki; then
     local pcr_banks pcr_private_key pcr_public_key secureboot_private_key secureboot_certificate
@@ -259,7 +265,7 @@ _generate_fallback_initramfs() {
 
   if [[ ! $booster_config =~ "universal: true" ]]; then
     if ! _should_generate_fallback || ! _has_fallback_initramfs "$pkgbase"; then
-      return;
+      return
     fi
   fi
 

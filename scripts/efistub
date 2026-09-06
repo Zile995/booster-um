@@ -198,6 +198,7 @@ _get_efi_info() {
   if [[ "$uniq_flag" == "yes" ]]; then
     readarray -t result_ref < <(printf "%s\n" "${result[@]}" | sort -u)
   else
+    # shellcheck disable=SC2034
     result_ref=("${result[@]}")
   fi
 }
@@ -210,7 +211,7 @@ _get_label() {
   os_name="$(_get_os_name)"
 
   # If UKI file is fallback, append the -fallback string to the pkgbase name
-  [[ $uki == *"${pkgbase}-fallback.efi"* ]] && pkgbase="${pkgbase}-fallback"
+  [[ $uki == *"-fallback.efi"* ]] && pkgbase="${pkgbase}-fallback"
 
   # Return the label: Entry name + (pkgbase)
   echo "$os_name ($pkgbase)"
@@ -281,7 +282,7 @@ _create_efi_entry() {
   # If the default entry exists and is not default, remove it first
   if [[ $default_entry == "$pkgbase" ]]; then
     # Check if path is a fallback image
-    if [[ ! $loader_path == *"${pkgbase}.efi"* ]] && _has_default_initramfs "$pkgbase"; then
+    if [[ $loader_path == *"-fallback.efi"* ]] && _has_default_initramfs "$pkgbase"; then
       index=1;
     fi
 
@@ -336,8 +337,6 @@ _create_efi_entry() {
     fi
   fi
 
-  _remove_orphaned_efi_entries
-
   return "$status"
 }
 
@@ -383,7 +382,7 @@ _remove_orphaned_efi_entries() {
   if ! _command_exists efibootmgr || ! _should_create_efi_entry; then exit; fi
 
   # Search pattern
-  # This should be a EFI path
+  # This should be an EFI path
   local search
   
   # Search the paths containing esp\EFI\Linux\${os_id}-
@@ -393,6 +392,9 @@ _remove_orphaned_efi_entries() {
   # Get all uniqe loader paths
   local loader_paths
   _get_efi_info -p "$search" -u loader_paths
+
+  # Return if there are no loader paths
+  if (( ${#loader_paths[@]} == 0 )); then return; fi
 
   for loader_path in "${loader_paths[@]}"; do
     if ! _loader_file_exists "$loader_path"; then

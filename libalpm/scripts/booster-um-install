@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eo pipefail
 
 # Generate and sign all UKI files
 declare -g SIGN_ALL=1
@@ -16,46 +16,46 @@ declare -a sorted_pkgbases=()
 
 while read -r line; do
   case "$line" in
-    usr/bin/booster | usr/bin/booster-um | usr/bin/ukify)
-      SIGN_ALL=0
-      ;;
+    usr/bin/booster | usr/bin/booster-um | usr/bin/ukify | \
     usr/lib/booster/* | usr/lib/firmware/* | usr/src/*/dkms.conf)
-      SIGN_ALL=0
+      (( SIGN_ALL )) && SIGN_ALL=0
       ;;
     usr/lib/modules/*/vmlinuz | usr/lib/modules/*/extramodules/*)
-      modules_suffix="${line#usr/lib/modules/}"
-      uname="${modules_suffix%%/*}"
-      kernels["$uname"]=1
+      if (( SIGN_ALL == 1 && ALL == 1 )); then
+        modules_suffix="${line#usr/lib/modules/}"
+        uname="${modules_suffix%%/*}"
+        kernels["$uname"]=1
+      fi
       ;;
     *)
-      ALL=0
+      (( ALL )) && ALL=0
       ;;
   esac
 done
 
 # Generate and sign UKI files for all kernels
-if [[ $SIGN_ALL -eq 0 ]]; then booster-um -G; exit; fi
+if (( SIGN_ALL == 0 )); then exec booster-um -G; fi
 
 # Sbctl hook should sign the UKI file if it already exists in database
 # Disable the signing inside the booster-um
 export ALWAYS_SIGN=1
 
 # Generate UKI files for all kernels
-if [[ $ALL -eq 0 ]]; then booster-um -G; exit; fi
+if (( ALL == 0 )); then exec booster-um -G; fi
 
 # Get the sorted pkgbases
 mapfile -t sorted_pkgbases < <(
   for uname in "${!kernels[@]}"; do
-    kernel_dir="/usr/lib/modules/${uname}"
+    pkgbase_file="/usr/lib/modules/${uname}/pkgbase"
 
-    if ! pacman -Qqo -- "${kernel_dir}/pkgbase" > /dev/null 2>&1; then
+    if ! pacman -Qqo -- "$pkgbase_file" > /dev/null 2>&1; then
       continue
     fi
 
-    read -r pkgbase < "${kernel_dir}/pkgbase"
+    read -r pkgbase < "$pkgbase_file"
     printf '%s\n' "$pkgbase"
   done | sort
 )
 
 # Genearate UKI files for updated kernels
-booster-um -u "${sorted_pkgbases[@]}"
+exec booster-um -u "${sorted_pkgbases[@]}"

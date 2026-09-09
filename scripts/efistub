@@ -18,31 +18,65 @@ declare -g ESP_MOUNT
 # Sets EFI dir path
 _set_efi_path() {
   local esp_path boot_path
-  esp_path="$(bootctl -p)"
-  boot_path="$(bootctl -x)"
+  local boot_partition part_guid
 
-  ESP_MOUNT="$esp_path"
+  if _command_exists bootctl; then
+    esp_path="$(bootctl -p)"
+    boot_path="$(bootctl -x)"
 
-  if [[ "$esp_path" != "$boot_path" ]]; then
-    local boot_partition part_guid xbootldr_guid
-    # XBOOTLDR GUID
-    xbootldr_guid="bc13c2ff-59e6-4262-a352-b275fd6f7172"
+    # Use the default esp path
+    ESP_MOUNT="$esp_path"
 
-    # BOOT partition. Example: /dev/nvme0n1p4
-    boot_partition="$(findmnt --real -nreo source "${boot_path}")"
+    if [[ "$esp_path" != "$boot_path" ]]; then
+      # XBOOTLDR Partition GUID
+      local XBOOTLDR_GUID="bc13c2ff-59e6-4262-a352-b275fd6f7172"
 
-    # Partition GUID TYPE
-    part_guid="$(partx -g -o TYPE "${boot_partition}")"
+      # BOOT partition. Example: /dev/nvme0n1p1
+      boot_partition="$(findmnt --real -nreo source "$boot_path")"
 
-    # If boot partition has the XBOOTLDR GUID value, set the mount path
-    if [[ "$part_guid" == "$xbootldr_guid" ]]; then
-      ESP="$boot_partition"
-      ESP_MOUNT="$boot_path"
+      # Partition GUID TYPE
+      part_guid="$(partx -g -o TYPE "$boot_partition" 2>/dev/null)"
+
+      # If boot partition has the XBOOTLDR GUID value, set the mount path
+      if [[ "$part_guid" == "$XBOOTLDR_GUID" ]]; then
+        ESP="$boot_partition"
+        ESP_MOUNT="$boot_path"
+      fi
     fi
+  else
+    # EFI System Partition GUID
+    local ESP_GUID="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
+
+    while read -r mountpoint; do
+      # BOOT partition. Example: /dev/nvme0n1p1
+      boot_partition="$(findmnt --real -nreo source "$mountpoint")"
+
+      # Partition GUID TYPE
+      part_guid="$(partx -g -o TYPE "$boot_partition" 2>/dev/null)"
+
+      # If it is GPT or MBR EFI partition guid, set the ESP path
+      if [[ "$part_guid" == "$ESP_GUID" || "$part_guid" == "0xef" ]]; then
+        esp_path="$mountpoint"
+        ESP="$boot_partition"
+        break
+      fi
+    done < <(findmnt -rn -t vfat -o TARGET)
+
+    # ESP is $BOOT
+    ESP_MOUNT="$esp_path"
+  fi
+
+  # Exit if mount point is not detected
+  if [[ -z "$ESP_MOUNT" ]]; then
+    $_msg_error "${R}Error: Failed to detect EFI or BOOT mount point!${NC}"
+    exit 1
   fi
 
   # Set the EFI dir where the UKI files will be saved
   EFI_DIR="${ESP_MOUNT}/EFI/Linux"
+
+  # Create EFI dir if it doesn't exist
+  mkdir -p "$EFI_DIR"
 
   [[ -z $ESP ]] && ESP="$(findmnt --real -nreo source "${ESP_MOUNT}")"
 

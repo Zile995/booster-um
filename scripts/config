@@ -16,7 +16,7 @@ readonly CONFIG=/etc/booster-um.yaml
 readonly BOOSTER_CONFIG=/etc/booster.yaml
 
 # Set the default Arch Linux splash
-readonly arch_splash=/usr/share/systemd/bootctl/splash-arch.bmp
+readonly ARCH_SPLASH=/usr/share/systemd/bootctl/splash-arch.bmp
 
 # Checks if booster-um.yaml config is valid
 _init_config() {
@@ -84,6 +84,15 @@ _low_memory() {
     low_memory=1; return 1
   fi
   _is_enabled_parameter "low_memory"; low_memory=$?; return "$low_memory"
+}
+
+# Checks if the verbose parameter is enabled for the booster
+_verbose() {
+  [[ -z $verbose ]] || return "$verbose"
+  if ! _is_config_valid || ! _has_config_parameter "verbose"; then
+    verbose=1; return 1
+  fi
+  _is_enabled_parameter "verbose"; verbose=$?; return "$verbose"
 }
 
 # Checks if booster-um should include microcode files.
@@ -252,7 +261,7 @@ _get_booster_config() {
   local booster_config
   booster_config="$(yq ".kernel_config.${pkgbase}.booster_config" "$CONFIG" 2>/dev/null)"
   [[ $booster_config == null || -z $booster_config ]] && return
-  echo "$booster_config"
+  printf '%s\n' "$booster_config"
 }
 
 # Returns the sbsign property value
@@ -342,7 +351,7 @@ _get_splash_path() {
   _should_enable_splash || return 0
 
   # If the config file doesn't exist or is not valid, use the default arch linux splash
-  if ! _is_config_valid; then echo "$arch_splash" && return; fi
+  if ! _is_config_valid; then echo "$ARCH_SPLASH" && return; fi
 
   # Set the pkgbase splash path from the config file
   local pkgbase_splash
@@ -367,10 +376,10 @@ _get_splash_path() {
       splash="$default_splash"
     # Use default Arch Linux splash if omitted entirely from config
     else
-      splash="$arch_splash"
+      splash="$ARCH_SPLASH"
     fi
   fi
 
   # Validate if the selected file is a BMP, otherwise use the Arch fallback
-  if _is_bmp "$splash"; then echo "$splash"; else echo "$arch_splash"; fi
+  if _is_bmp "$splash"; then echo "$splash"; else echo "$ARCH_SPLASH"; fi
 }

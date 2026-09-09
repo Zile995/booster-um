@@ -2,6 +2,105 @@
 
 set -eo pipefail
 
+# Installs the vmlinuz
+_install_vmlinuz() {
+  local pkgbase="$1"
+  local uname="$2"
+
+  local boot_vmlinuz="/boot/vmlinuz-${pkgbase}"
+  [[ -e $boot_vmlinuz ]] && return
+
+  local kernel="/usr/lib/modules/${uname}"
+  local module_vmlinuz="${kernel}/vmlinuz"
+  if [[ ! -e $module_vmlinuz ]]; then
+    $_msg_error "Unable to find vmlinuz for ${R}${pkgbase}${NC}..."
+    return 1
+  fi
+
+  # Install the vmlinuz
+  install -Dm644 "$module_vmlinuz" "$boot_vmlinuz"
+}
+
+# Generate initramfs for specified kernel path
+_generate_initramfs() {
+  local pkgbase="$1"
+  local uname="$2"
+
+  $_msg_h2_info "Generating initramfs for ${G}${pkgbase}${NC}..."
+
+  # Install the vmlinuz
+  if ! _install_vmlinuz "$pkgbase" "$uname"; then return 1; fi
+
+  if _has_default_initramfs "$pkgbase"; then
+    local initramfs booster_config
+    local -a booster_args=(build --force)
+
+    # Set the booster initramfs file path
+    initramfs="/boot/booster-${pkgbase}.img"
+
+    # Enable verbose output
+    if _verbose; then booster_args+=(--verbose); fi
+
+    # Get booster config
+    booster_config="$(_get_booster_config "$pkgbase")"
+
+    # Set booster args
+    booster_args+=(${booster_config:+"--config=/dev/stdin"} \
+                  --kernel-version "$uname" \
+                  "$initramfs")
+
+    # Generate initramfs
+    if ! booster "${booster_args[@]}" <<< "$booster_config"; then
+      $_msg_error "Unable to generate initramfs for ${R}${pkgbase}${NC}..."
+      _remove_boot_leftovers "$pkgbase"
+      return 1
+    fi
+
+    # Set the permission to 600 for the initramfs file
+    chmod -f 600 -- "$initramfs"
+  fi
+
+   # Generate the fallback initramfs
+  _generate_fallback_initramfs "$pkgbase" "$uname"
+}
+
+# Generates fallback initramfs
+_generate_fallback_initramfs() {
+  local pkgbase="$1"
+
+  local booster_config
+  booster_config="$(_get_booster_config "$pkgbase")"
+
+  if [[ ! $booster_config =~ "universal: true" ]]; then
+    if ! _should_generate_fallback || ! _has_fallback_initramfs "$pkgbase"; then
+      return
+    fi
+  fi
+
+  local uname="$2"
+  local fallback_initramfs="/boot/booster-${pkgbase}-fallback.img"
+  local -a booster_args=(build --force)
+
+  # Enable verbose output
+  if _verbose; then booster_args+=(--verbose); fi
+
+  # Set booster args
+  booster_args+=(${booster_config:+"--config=/dev/stdin"} \
+                         --universal \
+                         --kernel-version "$uname" \
+                         "$fallback_initramfs")
+
+  # Generate the fallback initramfs
+  if ! booster "${booster_args[@]}" <<< "$booster_config"; then 
+    $_msg_error "Unable to generate fallback initramfs for ${R}${pkgbase}${NC}..."
+    _remove_boot_leftovers "$pkgbase"
+    return 1
+  fi
+
+  # Set the permission to 600 for the initramfs file
+  chmod -f 600 -- "$fallback_initramfs"
+}
+
 # Generates one UKI
 _generate_uki() {
   # arguments
@@ -192,102 +291,6 @@ _generate_kernel_uki() {
   if [[ $fail_count -eq ${#input_pkgbases[@]} ]] || [[ $overall_status -ne 0 ]]; then
     return 1
   fi
-}
-
-# Generate initramfs for specified kernel path
-_generate_initramfs() {
-  local pkgbase="$1"
-  local uname="$2"
-
-  $_msg_h2_info "Generating initramfs for ${G}${pkgbase}${NC}..."
-
-  # Install the vmlinuz
-  if ! _install_vmlinuz "$pkgbase" "$uname"; then return 1; fi
-
-  if _has_default_initramfs "$pkgbase"; then
-    local initramfs booster_config
-    local -a booster_args
-
-    # Set the booster initramfs file path
-    initramfs="/boot/booster-${pkgbase}.img"
-
-    # Get booster config
-    booster_config="$(_get_booster_config "$pkgbase")"
-
-    # Set booster args
-    booster_args=(build \
-                  --force \
-                  ${booster_config:+"--config=/dev/stdin"} \
-                  --kernel-version "$uname" \
-                  "$initramfs")
-
-    # Generate initramfs
-    if ! echo "$booster_config" | booster "${booster_args[@]}"; then
-      $_msg_error "Unable to generate initramfs for ${R}${pkgbase}${NC}..."
-      _remove_boot_leftovers "$pkgbase"
-      return 1
-    fi
-
-    # Set the permission to 600 for the initramfs file
-    chmod -f 600 -- "$initramfs"
-  fi
-
-   # Generate the fallback initramfs
-  _generate_fallback_initramfs "$pkgbase" "$uname"
-}
-
-# Installs the vmlinuz
-_install_vmlinuz() {
-  local pkgbase="$1"
-  local uname="$2"
-
-  local boot_vmlinuz="/boot/vmlinuz-${pkgbase}"
-  [[ -e $boot_vmlinuz ]] && return
-
-  local kernel="/usr/lib/modules/${uname}"
-  local module_vmlinuz="${kernel}/vmlinuz"
-  if [[ ! -e $module_vmlinuz ]]; then
-    $_msg_error "Unable to find vmlinuz for ${R}${pkgbase}${NC}..."
-    return 1
-  fi
-
-  # Install the vmlinuz
-  install -Dm644 "$module_vmlinuz" "$boot_vmlinuz"
-}
-
-# Generates fallback initramfs
-_generate_fallback_initramfs() {
-  local pkgbase="$1"
-
-  local booster_config
-  booster_config="$(_get_booster_config "$pkgbase")"
-
-  if [[ ! $booster_config =~ "universal: true" ]]; then
-    if ! _should_generate_fallback || ! _has_fallback_initramfs "$pkgbase"; then
-      return
-    fi
-  fi
-
-  local uname="$2"
-  local fallback_initramfs="/boot/booster-${pkgbase}-fallback.img"
-
-  # Set booster args
-  local -a booster_args=(build \
-                         --force \
-                         ${booster_config:+"--config=/dev/stdin"} \
-                         --universal \
-                         --kernel-version "$uname" \
-                         "$fallback_initramfs")
-
-  # Generate the fallback initramfs
-  if ! echo "$booster_config" | booster "${booster_args[@]}"; then 
-    $_msg_error "Unable to generate fallback initramfs for ${R}${pkgbase}${NC}..."
-    _remove_boot_leftovers "$pkgbase"
-    return 1
-  fi
-
-  # Set the permission to 600 for the initramfs file
-  chmod -f 600 -- "$fallback_initramfs"
 }
 
 # Regenerates UKI files for all installed kernels

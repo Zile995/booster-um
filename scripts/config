@@ -76,16 +76,6 @@ _should_enable_colors() {
   _is_enabled_parameter "colors"; colors=$?; return "$colors"
 }
 
-# Checks if booster should use less memory.
-# Booster should generate initramfs one by one (not in parallel)
-_low_memory() {
-  [[ -z $low_memory ]] || return "$low_memory"
-  if ! _is_config_valid || ! _has_config_parameter "low_memory"; then
-    low_memory=1; return 1
-  fi
-  _is_enabled_parameter "low_memory"; low_memory=$?; return "$low_memory"
-}
-
 # Checks if the verbose parameter is enabled for the booster
 _verbose() {
   [[ -z $verbose ]] || return "$verbose"
@@ -93,6 +83,16 @@ _verbose() {
     verbose=1; return 1
   fi
   _is_enabled_parameter "verbose"; verbose=$?; return "$verbose"
+}
+
+# Checks if booster should use less memory.
+# Booster should generate initramfs one by one (not in parallel)
+_low_memory() {
+  [[ -z $low_memory ]] || return "$low_memory"
+  if ! _is_config_valid || ! _has_config_parameter "low_memory" || _verbose; then
+    low_memory=1; return 1
+  fi
+  _is_enabled_parameter "low_memory"; low_memory=$?; return "$low_memory"
 }
 
 # Checks if booster-um should include microcode files.
@@ -119,9 +119,14 @@ _should_enable_splash() {
 }
 
 # Checks if the booster-um should always generate a fallback UKI
+# The booster-um config has higher priority and overrides main booster configuration
 _should_generate_fallback() {
   [[ -z $generate_fallback ]] || return "$generate_fallback"
-  _is_universal || { _is_config_valid && _is_enabled_parameter "generate_fallback"; }
+  if _is_config_valid && _has_config_parameter "generate_fallback"; then
+    _is_enabled_parameter "generate_fallback"
+  else
+    _is_universal
+  fi
   generate_fallback=$?
   return "$generate_fallback"
 }
@@ -299,17 +304,27 @@ _has_fallback_initramfs() {
 _get_default_initramfs_types() {
   local -n initramfs_types="$1"
 
+  # The universal flag is enabled in the main booster config file
+  # Booster will always generate fallback images, so mark them fallback and return
+  if _is_universal; then
+    initramfs_types=(fallback)
+    return
+  fi
+
+  # If the config file is not valid, allow both types for all kernels
   if ! _is_config_valid; then
     initramfs_types=(default fallback)
     return
   fi
 
+  # If defalt_initramfs is not specified, generate both types
   readarray initramfs_types < <(yq ".kernel_config.default_initramfs[]" "$CONFIG")
   if (( ${#initramfs_types[@]} == 0 )); then
     initramfs_types=(default fallback)
     return
   fi
-    
+
+  # If generation of fallback images is disabled, and default type is not specified, mark all images as default type
   if [[ ! "${initramfs_types[*]}" =~ "default" && "${initramfs_types[*]}" =~ "fallback" ]] && ! _should_generate_fallback; then
     initramfs_types=(default)
   fi
@@ -319,20 +334,19 @@ _get_default_initramfs_types() {
 _set_initramfs_config() {
   local -a value=()
   for pkgbase in "${sorted_pkgbases[@]}"; do
-    # Get the initramfs type array for specified kernel pkgbase
-    readarray value < <(yq ".kernel_config.${pkgbase}.initramfs[]" "$CONFIG")
+    # Get booster config
+    local booster_config
+    booster_config="$(_get_booster_config "$pkgbase")"
 
-    # If the kernel is not specified, use the default initramfs
-    if ! _is_config_valid || (( ${#value[@]} == 0 )); then
-      _get_default_initramfs_types value
+    if _is_universal || [[ $booster_config =~ "universal: true" ]]; then
+      value=(fallback)
     else
-      # Get booster config
-      local booster_config
-      booster_config="$(_get_booster_config "$pkgbase")"
+      # Get the initramfs type array for specified kernel pkgbase
+      readarray value < <(yq ".kernel_config.${pkgbase}.initramfs[]" "$CONFIG")
 
-      # If fallback images should not be generated and there is only fallback type, create the default image
-      if _is_universal || [[ $booster_config =~ "universal: true" ]]; then
-        value=(fallback)
+      # If the kernel is not specified, use the default initramfs
+      if ! _is_config_valid || (( ${#value[@]} == 0 )); then
+        _get_default_initramfs_types value
       elif [[ ! "${value[*]}" =~ "default" && "${value[*]}" =~ "fallback" ]] && ! _should_generate_fallback; then
         value=(default)
       fi

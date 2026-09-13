@@ -397,3 +397,23 @@ _get_splash_path() {
   # Validate if the selected file is a BMP, otherwise use the Arch fallback
   if _is_bmp "$splash"; then echo "$splash"; else echo "$ARCH_SPLASH"; fi
 }
+
+# Returns the UKI file path without .efi extension for specified pkgbase
+_get_uki_file_path() {
+  local pkgbase="$1"
+  local os_id uki_path
+
+  os_id="$(_get_os_id)"
+  uki_path="${EFI_DIR}/${os_id}-${pkgbase}"
+
+  if _should_append_machine_id; then
+    local machine_id
+    read -r machine_id < /etc/machine-id
+    if _should_create_efi_entry; then
+      machine_id="${machine_id:0:8}";
+    fi
+    uki_path="${uki_path}-${machine_id}"
+  fi
+
+  echo "$uki_path"
+}

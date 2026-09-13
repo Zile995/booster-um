@@ -149,17 +149,10 @@ _generate_uki() {
     mapfile -d '' microcodes < <(find /boot -name '*-ucode.img' -type f -print0)
   fi
 
-  
-  local os_id uki_path
-  os_id="$(_get_os_id)"
-  uki_path="${EFI_DIR}/${os_id}-${pkgbase}"
+  # UKI file path without .efi file extension
+  uki_path="$(_get_uki_file_path "$pkgbase")"
 
-  if _should_append_machine_id; then
-    local machine_id
-    read -r machine_id < /etc/machine-id
-    uki_path="${uki_path}-${machine_id}"
-  fi
-
+  # SBSIGN setup
   local -a sign_args=()
   if [[ $SBSIGN -eq 0 ]] && _should_sign_uki; then
     local pcr_banks pcr_private_key pcr_public_key secureboot_private_key secureboot_certificate
@@ -176,6 +169,7 @@ _generate_uki() {
                 ${secureboot_certificate:+"--secureboot-certificate=$secureboot_certificate"})
   fi
 
+  # Generate UKI for each initramfs
   for booster_initramfs in "${booster_inits[@]}"; do
     # Current UKI path for selected booster initramfs
     local current_uki_path="$uki_path"

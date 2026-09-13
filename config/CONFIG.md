@@ -107,8 +107,14 @@ fallback_cmdline: "root=LABEL=arch_root rw"
 * `generate_fallback` manages the creation of `fallback` (universal) UKI files. The fallback images will only be generated if `universal` flag is enabled in the `/etc/booster.yaml` config, so the main `/etc/booster.yaml` config file is respected. If it is not specified, its value is set to `false`
 
 * `append_machine_id` appends the system machine ID (`/etc/machine-id`) to the generated UKI filename (e.g., `/EFI/Linux/<os_id>-<kernel_package>-<machine_id>[-fallback]`). This can be particularly useful when dual-booting two installations of the same distribution on a shared ESP to prevent file collisions. If it is not specified, its value is set to `false`
+    > **Note**: If you enabled this options, booster-um will not delete UKI files **with old names**, even if `remove_leftovers` is enabled. You will have to remove the EFI entry and UKI files from the ESP and the sbctl database manually
 
-* `os_id` sets a custom OS identifier prefix for UKI filenames (`/EFI/Linux/<os_id>-<kernel_package>.efi`). If not set, the value of `ID` from `/etc/os-release` (e.g. `arch`) is used as the default. This option defines the prefix appended before the kernel package name in generated Unified Kernel Image (UKI) filenames: (e.g. /EFI/Linux/**arch**-linux.efi )
+    > **Note**: When `efistub` is enabled, booster-um automatically truncates the machine ID to its first 8 characters (e.g., `arch-linux-3b8c579a.efi`) to ensure compatibility with UEFI firmware path length limits. If you encounter issues creating EFI boot entries, keep this option set to `false`.
+
+* `os_id` sets a custom OS identifier prefix for UKI filenames (`/EFI/Linux/<os_id>-<kernel_package>.efi`). If not set, the value of `ID` from `/etc/os-release` (e.g. `arch`) is used as the default. This option defines the prefix appended before the kernel package name in generated Unified Kernel Image (UKI) filenames: (e.g., /EFI/Linux/**arch**-linux.efi ). This is also useful when dual-booting two installations of the same distribution on a shared ESP
+    > **Note**: If you enabled this options, booster-um will not delete UKI files **with old names**, even if `remove_leftovers` is enabled. You will have to remove the EFI entry and UKI files from the ESP and the sbctl database manually
+
+    > **Note**: Keep `os_id` **short and simple**. Long identifiers result in extended EFI paths, which can cause buggy UEFI firmware to freeze or lock up when attempting to load the EFI entry
 
 * `cmdline` is the default kernel cmdline and is used by **all** kernels. If `cmdline` is not defined here, booster-um will try to use the cmdline from `/etc/kernel/cmdline` file. If cmdline is not defined neither in the config nor in the `/etc/kernel/cmdline` file, the current cmdline from `/proc/cmdline` will be used. Kernel parameters can be written in multiple lines after the `>` sign. For example:
   ```YAML
@@ -159,7 +165,7 @@ Also, you can write kernel parameters in multiple lines inside the cmdline files
   * `share_default_cmdline` allows default cmdline to be shared with the cmdline of the **specified** kernel pkgbase under the `kernel_config` node. The default cmdline `cmdline`, `fallback_cmdline` or `/etc/kernel/cmdline`, `/etc/kernel/cmdline-fallback` files will be used as a shared cmdline for **all** kernels. That means that the kernel cmdline specified under `pkgbase` node, will be added to the default cmdline. This option only takes effect if the `cmdline_per_kernel` option is enabled. By default this option is set to `false`
 
   * `default_initramfs` array provides initramfs type configuration for all other unspecified kernels. You can specify up to two types, `default` and `fallback`. If not defined, its values ​​will be `default` and `fallback`
-   > **Note**: If you specified `fallback` type, you must enable `generate_fallback`, otherwise it will generate `default` images only. If you enable universal inside the booster config file `/etc/booster.yaml`, booster-um will only create fallback images.
+    > **Note**: If you specified `fallback` type, you must enable `generate_fallback`, otherwise it will generate `default` images only. If you enabled `universal` parameter inside the booster config file (`/etc/booster.yaml`), booster-um will only create `fallback` images
  
   * `default_splash` a picture to display during boot. This is the default splash for all **unspecified** kernels under `kernel_config` node. The argument is a path to a **BMP** file. The default `/usr/share/systemd/bootctl/splash-arch.bmp` picture will be used if this path is invalid or not specified. To disable splash screen for all **unspecified pkgbases** under `kernel_config` node, simply set this option to `false` or leave it blank, for example:
     ```YAML
@@ -196,7 +202,7 @@ Also, you can write kernel parameters in multiple lines inside the cmdline files
        compression: lz4
        extra_files: busybox,fsck,fsck.ext4
       ```
-     > **Note**: If you enable `universal` flag here, booster-um will only create a fallback UKI for the **specified** kernel even if `generate_fallback` is disabled, or `initramfs` (`default_initramfs`) has type specified. So, the booster config is always respected.
+      > **Note**: If you enable `universal` flag here, booster-um will only create a fallback UKI for the **specified** kernel even if `generate_fallback` is disabled, or `initramfs` (`default_initramfs`) has type specified. So, the booster config is always respected.
 
 ## EFISTUB config
 

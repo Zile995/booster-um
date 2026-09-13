@@ -45,9 +45,8 @@ _remove_other_leftovers() {
   local pkgbase="$1"
   local os_id uki fallback_uki booster_config
 
-  os_id="$(_get_os_id)"
-  uki="${EFI_DIR}/${os_id}-${pkgbase}.efi"
-  fallback_uki="${EFI_DIR}/${os_id}-${pkgbase}-fallback.efi"
+  uki="$(_get_uki_file_path "$pkgbase").efi"
+  fallback_uki="${uki%.efi}-fallback.efi"
   booster_config="$(_get_booster_config "$pkgbase")"
 
   # Remove fallback UKI files in ESP if fallback generation is not enabled

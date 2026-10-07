@@ -53,13 +53,6 @@ booster-um config file is located at `/etc/booster-um.yaml`. It is empty by defa
    default_entry: linux
    os_name: "Arch Linux"
    append_entries: true
-
- sbsign_config:
-   pcr_banks: sha1,sha256,sha384,sha512
-   pcr_private_key: /path/to/pcr-private-key.pem
-   pcr_public_key: /path/to/pcr-public-key.pem
-   secureboot_private_key: /path/to/DB.key
-   secureboot_certificate: /path/to/DB.crt
  ```
 
 ## First level configuration
@@ -88,25 +81,25 @@ fallback_cmdline: "root=LABEL=arch_root rw"
 
 * `sign_uki` manages the UKI signing. If enabled, `sbctl` (or `sbsign`), will sign generated UKI files. If it is not specified, its value is set to `true`
 
-* `sbsign` manages UKI signing using the `sbsign` tool. If enabled, `sbsign` will be used instead of `sbctl`. After enabling this type of signing, the options in the `sbsign_config` node can be set arbitrarily. If it is not specified, its value is set to `false`
+* `sbsign` delegates UKI signing directly to `ukify`, using the signing tool and keys configured in `/etc/systemd/ukify.conf`. When enabled, `booster-um` allows `ukify` to sign the binary during the build process and skips external signing via `sbctl`. If not specified, its value defaults to `false`.
 
-* `colors` colors the output of the booster-um. If it is not specified, its value is set to `true`
+* `colors` colors the output of the booster-um. If not specified, its value is set to `true`
 
-* `efistub` manages EFI entries. If enabled, booster-um will create a new EFI entry. If it is not specified, its value is set to `false`
+* `efistub` manages EFI entries. If enabled, booster-um will create a new EFI entry. If not specified, its value is set to `false`
 
-* `microcode` manages the inclusion of the microcode images (intel-ucode and amd-ucode). If it is not specified, its value is set to `true`
+* `microcode` manages the inclusion of the microcode images (intel-ucode and amd-ucode). If not specified, its value is set to `true`
 
-* `verbose` enables verbose output for `booster` during initramfs generation. When enabled, `low_memory` mode is automatically activated to build initramfs sequentially and prevent log output from overlapping. If it is not specified, its value is set to `false`
+* `verbose` enables verbose output for `booster` during initramfs generation. When enabled, `low_memory` mode is automatically activated to build initramfs sequentially and prevent log output from overlapping. If not specified, its value is set to `false`
 
-* `low_memory` is an option that prevents high memory usage, especially when fallback images are generated. Instead of generating initramfs in parallel, booster-um will generate initramfs one by one. This is certainly slower, but takes up less memory. If it is not specified, its value is set to `false`
+* `low_memory` is an option that prevents high memory usage, especially when fallback images are generated. Instead of generating initramfs in parallel, booster-um will generate initramfs one by one. This is certainly slower, but takes up less memory. If not specified, its value is set to `false`
 
 * `enable_splash` is an option that enables splash screen. If you want to disable splash for **all specified or unspecified** kernels under `kernel_config` node, set it to `false`. By default this option is enabled and `/usr/share/systemd/bootctl/splash-arch.bmp` splash will be used (you can change it with `default_splash` option under `kernel_config` node)
 
-* `remove_leftovers` manages the removal of leftovers when generating the UKI files. Besides the vmlinuz and booster files: EFI entries, fallback images and kernel cmdlines are also treated as leftovers. They will be checked if `efistub`, `cmdline_per_kernel` or `generate_fallback` options are changed. If enabled, leftovers will always be removed after generating UKI files. Leftovers will always be removed if you manually delete the UKI for the specified kernel, or all installed kernels (`booster-um -r <package>` or `booster-um -R`/`booster-um -C`). If it is not specified, its value is set to `true`
+* `remove_leftovers` manages the removal of leftovers when generating the UKI files. Besides the vmlinuz and booster files: EFI entries, fallback images and kernel cmdlines are also treated as leftovers. They will be checked if `efistub`, `cmdline_per_kernel` or `generate_fallback` options are changed. If enabled, leftovers will always be removed after generating UKI files. Leftovers will always be removed if you manually delete the UKI for the specified kernel, or all installed kernels (`booster-um -r <package>` or `booster-um -R`/`booster-um -C`). If not specified, its value is set to `true`
 
-* `generate_fallback` manages the creation of `fallback` (universal) UKI files. The fallback images will only be generated if `universal` flag is enabled in the `/etc/booster.yaml` config, so the main `/etc/booster.yaml` config file is respected. If it is not specified, its value is set to `false`
+* `generate_fallback` manages the creation of `fallback` (universal) UKI files. The fallback images will only be generated if `universal` flag is enabled in the `/etc/booster.yaml` config, so the main `/etc/booster.yaml` config file is respected. If not specified, its value is set to `false`
 
-* `append_machine_id` appends the system machine ID (`/etc/machine-id`) to the generated UKI filename (e.g., `/EFI/Linux/<os_id>-<kernel_package>-<machine_id>[-fallback]`). This can be particularly useful when dual-booting two installations of the same distribution on a shared ESP to prevent file collisions. If it is not specified, its value is set to `false`
+* `append_machine_id` appends the system machine ID (`/etc/machine-id`) to the generated UKI filename (e.g., `/EFI/Linux/<os_id>-<kernel_package>-<machine_id>[-fallback]`). This can be particularly useful when dual-booting two installations of the same distribution on a shared ESP to prevent file collisions. If not specified, its value is set to `false`
     > **Note**: If you enabled this options, booster-um will not delete UKI files **with old names**, even if `remove_leftovers` is enabled. You will have to remove the EFI entry and UKI files from the ESP and the sbctl database manually
 
     > **Note**: When `efistub` is enabled, booster-um automatically truncates the machine ID to its first 8 characters (e.g., `arch-linux-3b8c579a.efi`) to ensure compatibility with UEFI firmware path length limits. If you encounter issues creating EFI boot entries, keep this option set to `false`.
@@ -160,7 +153,7 @@ Also, you can write kernel parameters in multiple lines inside the cmdline files
 
 `kernel_config` node provides kernel configuration:
 
-  * `cmdline_per_kernel` manages the creation of the cmdline per kernel. If this option is enabled, each kernel will use a separate cmdline which can be defined under `pkgbase` node within the `cmdline` option. If it is not specified, its value is set to `false`
+  * `cmdline_per_kernel` manages the creation of the cmdline per kernel. If this option is enabled, each kernel will use a separate cmdline which can be defined under `pkgbase` node within the `cmdline` option. If not specified, its value is set to `false`
 
   * `share_default_cmdline` allows default cmdline to be shared with the cmdline of the **specified** kernel pkgbase under the `kernel_config` node. The default cmdline `cmdline`, `fallback_cmdline` or `/etc/kernel/cmdline`, `/etc/kernel/cmdline-fallback` files will be used as a shared cmdline for **all** kernels. That means that the kernel cmdline specified under `pkgbase` node, will be added to the default cmdline. This option only takes effect if the `cmdline_per_kernel` option is enabled. By default this option is set to `false`
 
@@ -194,7 +187,7 @@ Also, you can write kernel parameters in multiple lines inside the cmdline files
       
         If cmdline doesn't exist neither in the config file nor in the mentioned files, booster-um will try to use the current cmdline from `/proc/cmdline`
 
-    * `initramfs` provides initramfs type configuration for **specified** kernel. Here you can specify up to two types, `default` and `fallback`. If it is not defined, the `default_initramfs` will be used
+    * `initramfs` provides initramfs type configuration for **specified** kernel. Here you can specify up to two types, `default` and `fallback`. If not defined, the `default_initramfs` will be used
 
     * `booster_config` provides additional booster configuration for **specified** kernel. Booster configuration can be written in multiple lines after the `|` sign. You can read [here](https://github.com/anatol/booster/blob/master/docs/manpage.md#config-file) about booster configuration. For example:
       ```YAML
@@ -216,22 +209,4 @@ efistub_config:
 * `efistub_config` node provides additional efistub configuration:
   * `default_entry` makes sure that the EFI entry of the **specified** kernel is the first in the EFI boot order. If fallback UKI is generated for the specified kernel, its EFI entry will be added after the default entry. After changing its value, it is enough to regenerate all images (`booster-um -G`)  
   * `os_name` sets a custom OS display name prefix for EFI boot entry labels (`<os_name> (<kernel_package>)`). If not set, the value of `NAME` from `/etc/os-release` (e.g., `Arch Linux`) is used as the default. This option defines the OS display name prefix that appears before the kernel package name in EFI boot entry labels (e.g., **Arch Linux** (linux), **My Arch** (linux))
-  * `append_entries` takes care of where new EFI entries will be added to the boot order. If enabled , **newly** created EFI entries will be added to the end of the boot order, otherwise they will be added to the beginning. If it is not specified, its value is set to `true`
-
-## sbsign config
-
-```YAML
- sbsign_config:
-   pcr_banks: sha1,sha256,sha384,sha512
-   pcr_private_key: /path/to/pcr-private-key.pem
-   pcr_public_key: /path/to/pcr-public-key.pem
-   secureboot_private_key: /path/to/DB.key
-   secureboot_certificate: /path/to/DB.crt
-```
-
-* `sbsign_config` node provides `sbsign` configuration:
-  * `pcr_banks` a comma separated list of PCR banks to sign a policy for
-  * `pcr_private_key` a path to a private key to use for signing PCR policies
-  * `pcr_public_key` a path to public key to use for signing PCR policies
-  * `secureboot_private_key` a path to a private key to use for signing of the UKI file
-  * `secureboot_certificate` a path to a certificate to use for signing of UKI file
+  * `append_entries` takes care of where new EFI entries will be added to the boot order. If enabled , **newly** created EFI entries will be added to the end of the boot order, otherwise they will be added to the beginning. If not specified, its value is set to `true`

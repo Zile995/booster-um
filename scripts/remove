@@ -82,6 +82,12 @@ _remove_other_leftovers() {
   if ! _cmdline_per_kernel; then
     _remove_cmdline "$pkgbase"
   fi
+
+  # Remove uki from the sbctl database if sbsign is enabled
+  if _is_sbsign_enabled || ! _should_sign_uki; then
+    _remove_from_db "$uki"
+    _remove_from_db "$fallback_uki"
+  fi
 }
 
 # Removes all known vmlinuz and initramfs files for specified kernel

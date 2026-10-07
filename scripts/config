@@ -2,9 +2,6 @@
 
 set -e
 
-# Disable sbsign by default
-declare -g SBSIGN=1
-
 # A value of 0 means that the booster-um config is valid
 declare -g CONFIG_VALID=0
 
@@ -31,6 +28,7 @@ _init_config() {
     CONFIG_VALID=0
   fi
   
+  # Set colors
   # shellcheck disable=SC2034
   if ! _should_enable_colors; then
     W="$NC"
@@ -39,15 +37,15 @@ _init_config() {
     B="$NC"
     Y="$NC"
   fi
-
-  _set_signing_tool
 }
 
-# Sets the default signing tool
-_set_signing_tool() {
-  (( CONFIG_VALID )) && return
-  # shellcheck disable=SC2034
-  if _command_exists sbsign && _is_enabled_parameter "sbsign"; then SBSIGN=0; fi
+# Checks if sbsign is enabled
+_is_sbsign_enabled() {
+  [[ -z $sbsign ]] || return "$sbsign"
+  if ! _is_config_valid || ! _has_config_parameter "sbsign"; then
+    sbsign=1; return 1
+  fi
+  _is_enabled_parameter "sbsign"; sbsign=$?; return "$sbsign"
 }
 
 # Checks if config has parameter
@@ -76,7 +74,7 @@ _should_enable_colors() {
   _is_enabled_parameter "colors"; colors=$?; return "$colors"
 }
 
-# Checks if the verbose parameter is enabled for the booster
+# Checks if the verbose parameter is enabled for the booster initramfs generator
 _verbose() {
   [[ -z $verbose ]] || return "$verbose"
   if ! _is_config_valid || ! _has_config_parameter "verbose"; then

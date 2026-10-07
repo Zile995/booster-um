@@ -107,7 +107,7 @@ _generate_uki() {
   local pkgbase="$1"
 
   # systemd-ukify paths
-  local CMDLINE SPLASH UNAME VMLINUZ UKI INITRD
+  local CMDLINE SPLASH UNAME VMLINUZ UKI
   UNAME="$2"
 
   _print_divider
@@ -144,76 +144,82 @@ _generate_uki() {
   SPLASH="$(_get_splash_path "$pkgbase")"
 
   # microcodes
-  local -a microcodes
+  local -a UCODE_INITS=()
   if _include_microcode; then
-    mapfile -d '' microcodes < <(find /boot -name '*-ucode.img' -type f -print0)
+    local ucode
+    while IFS= read -r -d '' ucode; do
+      UCODE_INITS+=("--initrd=$ucode")
+    done < <(find /boot -maxdepth 1 -name '*-ucode.img' -type f -print0)
   fi
 
   # UKI file path without .efi file extension
   uki_path="$(_get_uki_file_path "$pkgbase")"
 
-  # SBSIGN setup
-  local -a sign_args=()
-  if [[ $SBSIGN -eq 0 ]] && _should_sign_uki; then
-    local pcr_banks pcr_private_key pcr_public_key secureboot_private_key secureboot_certificate
-    pcr_banks="$(_get_sbsign_property pcr_banks)"
-    pcr_private_key="$(_get_sbsign_property pcr_private_key)"
-    pcr_public_key="$(_get_sbsign_property pcr_public_key)"
-    secureboot_private_key="$(_get_sbsign_property secureboot_private_key)"
-    secureboot_certificate="$(_get_sbsign_property secureboot_certificate)"
-
-    sign_args+=(${pcr_banks:+"--pcr-banks=$pcr_banks"} \
-                ${pcr_private_key:+"--pcr-private-key=$pcr_private_key"} \
-                ${pcr_public_key:+"--pcr-public-key=$pcr_public_key"} \
-                ${secureboot_private_key:+"--secureboot-private-key=$secureboot_private_key"} \
-                ${secureboot_certificate:+"--secureboot-certificate=$secureboot_certificate"})
-  fi
+  local overall_failed=0
 
   # Generate UKI for each initramfs
-  for booster_initramfs in "${booster_inits[@]}"; do
+  for BOOSTER_INITRAMFS in "${booster_inits[@]}"; do
     # Current UKI path for selected booster initramfs
     local current_uki_path="$uki_path"
-    local failed=0
-
-    # initrd temp path
-    INITRD="$(mktemp -t 'initrd.XXXXXX')"
-
-    # Create one initrd
-    cat -- "${microcodes[@]}" "$booster_initramfs" > "$INITRD"
 
     # Set UKI fallback path
-    if [[ $booster_initramfs == *"$pkgbase-fallback.img"* ]]; then
+    local fallback=1
+    if [[ $BOOSTER_INITRAMFS == *"$pkgbase-fallback.img"* ]]; then
       current_uki_path="${uki_path}-fallback"
       local fallback=0
     fi
 
     # cmdline file path or cmdline kernel parameters
-    CMDLINE="$(_get_cmdline "$pkgbase" "${fallback:-1}")"
+    CMDLINE="$(_get_cmdline "$pkgbase" "$fallback")"
 
     # Set the UKI file with .efi exstension
     UKI="${current_uki_path}.efi"
 
-    # Build the UKI file, sign it and create EFI entry
-    if ! { ukify build \
-        --uname="$UNAME" \
-        --linux="$VMLINUZ" \
-        --initrd="$INITRD" \
-        ${CMDLINE:+"--cmdline=$CMDLINE"} \
-        ${SPLASH:+"--splash=$SPLASH"} "${sign_args[@]}" \
-        --output="$UKI" 2>&1 | sed 's/^/  /' && \
-       _sign_uki "$UKI" && \
-       _create_efi_entry "$UKI" "$pkgbase"; }; then
-      $_msg_error "Unable to generate ${R}${UKI:-UKI}${NC} for ${R}${pkgbase}${NC}..."
-      failed=1
+    # Set the main ukify args
+    local -a ukify_args=(
+      "--uname=$UNAME"
+      "--linux=$VMLINUZ"
+      "${UCODE_INITS[@]}"
+      "--initrd=$BOOSTER_INITRAMFS"
+      ${CMDLINE:+"--cmdline=$CMDLINE"}
+      ${SPLASH:+"--splash=$SPLASH"}
+      "--output=$UKI"
+    )
+
+    # Do not sign the UKI if signing is disabled
+    if ! _should_sign_uki || ! _is_sbsign_enabled; then
+      ukify_args+=(
+        "--secureboot-private-key="
+        "--secureboot-certificate="
+        "--no-sign-kernel"
+      )
     fi
-    # Remove an old initrd after creating the UKI file
-    rm -f "$INITRD"
+
+    # 1. Build the UKI file
+    if ! ukify build "${ukify_args[@]}" 2>&1 | sed 's/^/  /'; then
+      $_msg_error "Unable to generate ${R}${UKI}${NC} for ${R}${pkgbase}${NC}..."
+      overall_failed=1
+      continue
+    fi
+
+    # 2. Sign the UKI by sbctl if needed
+    if ! _sign_uki "$UKI"; then
+      $_msg_error "Unable to sign ${R}${UKI}${NC} using sbctl..."
+      overall_failed=1
+      continue
+    fi
+
+    # 3. Create EFI Boot Entry
+    if ! _create_efi_entry "$UKI" "$pkgbase"; then
+      $_msg_error "Unable to create EFI entry for ${R}${UKI}${NC}..."
+      overall_failed=1
+    fi
   done
 
   # Remove the leftovers (vmlinuz, booster initramfs and other files)
   _remove_leftovers "$pkgbase"
   divider=0
-  return "$failed"
+  return "$overall_failed"
 }
 
 # Generates UKI file for specified kernel package names

@@ -166,7 +166,7 @@ _get_efi_info() {
   if [[ "$type" == "-o" ]]; then
     # boot_order has no pattern
     if [[ "$1" == "-u" ]]; then
-      uniq_flag="yes"
+      uniq_flag="true"
       shift
     fi
     if [[ $# -ne 1 ]]; then
@@ -184,7 +184,7 @@ _get_efi_info() {
     shift
 
     if [[ "$1" == "-u" ]]; then
-      uniq_flag="yes"
+      uniq_flag="true"
       shift
     fi
 
@@ -229,8 +229,14 @@ _get_efi_info() {
   esac
 
   # Uniquify if requested
-  if [[ "$uniq_flag" == "yes" ]]; then
-    readarray -t result_ref < <(printf "%s\n" "${result[@]}" | sort -u)
+  if [[ "$uniq_flag" == true ]]; then
+    if ((${#result[@]})); then
+      readarray -t result_ref < <(
+        printf '%s\n' "${result[@]}" | sort -u
+      )
+    else
+      result_ref=()
+    fi
   else
     # shellcheck disable=SC2034
     result_ref=("${result[@]}")

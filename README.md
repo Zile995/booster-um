@@ -91,6 +91,35 @@ If you are using an Arch-based distribution, install [booster-um](https://aur.ar
 
 For information about configuration, read [this documentation](https://github.com/Zile995/booster-um/blob/main/config/CONFIG.md).
 
+When specific parameters are omitted or left undefined in the `/etc/booster-um.yaml` configuration file, `booster-um` automatically applies the following default values and resolution orders:
+
+| Parameter | Node / Context | Default / Unspecified Value / Fallback Behavior | Explanation |
+| :--- | :--- | :--- | :--- |
+| `sign_uki` | First level | `true` | Manages UKI signing. |
+| `sbsign` | First level | `false` | Delegates UKI signing to `ukify`. |
+| `colors` | First level | `true` | Colors terminal output. |
+| `efistub` | First level | `false` | Manages EFI entries. |
+| `microcode` | First level | `true` | Includes microcode images. |
+| `verbose` | First level | `false` | Enables verbose output for booster. |
+| `low_memory` | First level | `false` | Sequential initramfs generation to save memory. |
+| `enable_splash` | First level | `/usr/share/systemd/bootctl/splash-arch.bmp` | Enables the boot splash screen. |
+| `remove_leftovers` | First level | `true` | Removes old leftovers/files after generation. |
+| `generate_fallback` | First level | `false` | Manages creation of fallback UKI files. |
+| `append_machine_id` | First level | `false` | Appends system machine ID to filename. |
+| `os_id` | First level | Value of `ID` from `/etc/os-release` (e.g., `arch`) | Custom OS identifier prefix for UKI filenames. |
+| `cmdline` | First level | `/etc/kernel/cmdline`, then `/proc/cmdline` | Default kernel command line used by all kernels. |
+| `fallback_cmdline` | First level | `/etc/kernel/cmdline-fallback`, `/etc/kernel/cmdline`, then `/proc/cmdline` | Kernel command line used specifically for fallback images. |
+| `cmdline_per_kernel` | `kernel_config` | `false` | Enables creating a separate command line per kernel. |
+| `share_default_cmdline` | `kernel_config` | `false` | Shares default command line with kernel packages. |
+| `default_initramfs` | `kernel_config` | `[default, fallback]` | Initramfs types configuration for all unspecified kernels. |
+| `default_splash` | `kernel_config` | `/usr/share/systemd/bootctl/splash-arch.bmp` | Default splash picture for all unspecified kernels. |
+| `splash` | `$pkgbase` | Inherits `default_splash` value | Splash picture configuration for an individual kernel. |
+| `cmdline` | `$pkgbase` | Global `cmdline`, `/etc/kernel/$pkgbase-cmdline`, `/etc/kernel/cmdline`, then `/proc/cmdline` | Command line configuration for an individual kernel. |
+| `fallback_cmdline` | `$pkgbase` | `$pkgbase` default, global fallback/cmdline, or `/etc/kernel/$pkgbase-cmdline-fallback`, etc. | Fallback command line configuration for an individual kernel. |
+| `initramfs` | `$pkgbase` | Inherits `default_initramfs` value | Initramfs type configuration for an individual kernel. |
+| `os_name` | `efistub_config` | Value of `NAME` from `/etc/os-release` (e.g., `Arch Linux`) | Custom OS display name prefix for EFI boot entry labels. |
+| `append_entries` | `efistub_config` | `true` | Adds newly created EFI entries to the end of the boot order. |
+
 <h2 name="ukify_integration">
     Ukify integration
 </h2>

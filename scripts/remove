@@ -12,7 +12,7 @@ _remove_cmdline() {
   local pkgbase="$1"
 
   # cmdline paths
-  local cmdline_paths=(/etc/kernel/"${pkgbase}"{-fallback.cmdline,.cmdline})
+  local cmdline_paths=(/etc/kernel/"${pkgbase}"{-cmdline-fallback,-cmdline})
 
   for cmdline_path in "${cmdline_paths[@]}"; do
     # If the cmdline path exists, remove it
@@ -25,23 +25,29 @@ _remove_cmdline() {
 
 # Removes the leftovers from /boot
 _remove_boot_leftovers() {
-  local pkgbase="$1"
+  local -a pkgbases=("$@")
 
-  $_msg_warn "Removing ${G}${pkgbase}${NC} leftovers from ${Y}/boot${NC}..."
+  # Remove failed booster images
+  rm -f /boot/.booster-*.img*
 
-  # Remove leftovers from /boot dir
-  rm -f /boot/.booster*
-  rm -f /boot/vmlinuz-"${pkgbase}"
-  rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
+  if ! _should_remove_leftovers; then return; fi
+
+  for pkgbase in "${pkgbases[@]}"; do 
+    $_msg_warn "Removing ${Y}${pkgbase}${NC} leftovers from /boot..."
+    # Remove leftovers from /boot dir
+    rm -f /boot/vmlinuz-"${pkgbase}"
+    rm -f /boot/booster-"${pkgbase}"{-fallback.img,.img}
+  done
 }
 
 # Removes other leftovers (efi entries, cmdlines, fallback images)
 _remove_other_leftovers() {
   local pkgbase="$1"
+  local os_id uki fallback_uki booster_config
 
-  local uki="${EFI_DIR}/${os_id}-${pkgbase}.efi"
-  local fallback_uki="${EFI_DIR}/${os_id}-${pkgbase}-fallback.efi"
-  local booster_config="$(_get_booster_config "$pkgbase")"
+  uki="$(_get_uki_file_path "$pkgbase").efi"
+  fallback_uki="${uki%.efi}-fallback.efi"
+  booster_config="$(_get_booster_config "$pkgbase")"
 
   # Remove fallback UKI files in ESP if fallback generation is not enabled
   if [[ ! $booster_config =~ "universal: true" ]] && \
@@ -76,6 +82,12 @@ _remove_other_leftovers() {
   if ! _cmdline_per_kernel; then
     _remove_cmdline "$pkgbase"
   fi
+
+  # Remove uki from the sbctl database if sbsign is enabled
+  if _is_sbsign_enabled || ! _should_sign_uki; then
+    _remove_from_db "$uki"
+    _remove_from_db "$fallback_uki"
+  fi
 }
 
 # Removes all known vmlinuz and initramfs files for specified kernel
@@ -107,7 +119,7 @@ _cleanup() {
   _print_divider
 
   # Remove all initramfs-*, booster-*, vmlinuz-* files
-  rm -f /boot/{.initrd,initramfs,booster,vmlinuz}*
+  rm -f /boot/{.initrd,initramfs,.booster,booster,vmlinuz}*
 
   # Store all EFI files in array
   local efi_files=("${EFI_DIR}"/*.efi)
@@ -126,8 +138,8 @@ _cleanup() {
   rm -rf "$EFI_DIR"
 
   # Remove *.cmdline files
-  $_msg_warn "Removing all ${Y}.cmdline${NC} files from ${Y}/etc/kernel${NC}..."
-  rm -f "/etc/kernel/*.cmdline"
+  $_msg_warn "Removing all ${Y}cmdline${NC} files from ${Y}/etc/kernel${NC}..."
+  rm -f "/etc/kernel/*cmdline*"
 
   shopt -u nullglob
 }
@@ -137,11 +149,15 @@ _remove_uki() {
   local -a input_pkgbases
   readarray -t input_pkgbases < <(printf '%s\n' "$@" | sort -u)
 
+  local fail_count=0
+  
   divider=1
 
   for pkgbase in "${input_pkgbases[@]}"; do
-    # Check the pkgbase
-    _check_pkgbase "$pkgbase" || continue
+    if ! _check_pkgbase "$pkgbase"; then
+      fail_count=$((fail_count + 1))
+      continue
+    fi
 
     _print_divider
     $_msg_h2_warn "Removing UKI for ${G}${pkgbase} (${kernels[$pkgbase]})${NC}..."
@@ -149,11 +165,21 @@ _remove_uki() {
     # Remove leftovers from /boot dir
     _remove_boot_leftovers "$pkgbase"
 
+    local os_id uki_name
+    os_id="$(_get_os_id)"
+    uki_name="${os_id}-${pkgbase}"
+
+    if _should_append_machine_id; then
+      local machine_id
+      read -r machine_id < /etc/machine-id
+      uki_name="${uki_name}-${machine_id}"
+    fi
+
     # Store all UKI files in array
     readarray -t uki_files < <(find "${EFI_DIR}" \
       -type f \
-      -name "${os_id}-${pkgbase}.efi" -o \
-      -name "${os_id}-${pkgbase}-fallback.efi" 2> /dev/null)
+      -name "${uki_name}.efi" -o \
+      -name "${uki_name}-fallback.efi" 2> /dev/null)
 
     for uki in "${uki_files[@]}"; do
       # Remove the UKI file from sbctl database
@@ -170,6 +196,11 @@ _remove_uki() {
       if [[ $REMOVE_EFI -eq 0 ]]; then _remove_efi_entry "$uki"; fi
     done
 
+    # shellcheck disable=SC2034
     divider=0
   done
+
+  if [[ $fail_count -eq ${#input_pkgbases[@]} ]]; then
+    exit 1
+  fi
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eo pipefail
 
 # Flag which controls UKI signing
 # If this value is set to 0, then the UKI file will be always signed.
@@ -19,13 +19,13 @@ _sign_uki() {
   local uki="$1"
   # Return if sbsign is used or if the sbctl is not installed.
   # Also return if the UKI should not be signed
-  if [[ $SBSIGN -eq 0 ]] || ! _command_exists sbctl || ! _should_sign_uki; then return; fi
+  if _is_sbsign_enabled || ! _command_exists sbctl || ! _should_sign_uki; then return; fi
 
   # Sbctl hook should sign the UKI file if it already exists in database
   if [[ $ALWAYS_SIGN -eq 1 ]] && _in_db "$uki"; then return; fi
 
   # Sign UKI file with sbctl
-  sbctl sign --save "$uki" | nl -bn -w1 || :
+  sbctl sign --save "$uki" | sed 's/^/  /'
 }
 
 # Removes the file from the sbctl database
@@ -38,6 +38,6 @@ _remove_from_db() {
   # Remove the file if it exists in the database
   if _in_db "$file"; then
     # Remove the file from sbctl database
-    sbctl remove-file "$file" | nl -bn -w1 || :
+    sbctl remove-file "$file" | sed 's/^/  /'
   fi
 }

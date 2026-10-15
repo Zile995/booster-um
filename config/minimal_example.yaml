@@ -1,4 +1,3 @@
-efistub: true
 generate_fallback: true
 
 cmdline: >
@@ -20,6 +19,3 @@ kernel_config:
   linux-lts:
     splash: false
     initramfs: [fallback]
-
-efistub_config:
-  default_entry: linux

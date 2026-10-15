@@ -7,7 +7,7 @@
 set -e
 
 # Define the booster-um version
-declare -g VERSION="1.7.1"
+declare -g VERSION="2.0.0"
 
 main() {
   local arg="$1"
@@ -22,14 +22,15 @@ main() {
       exit 0
       ;;
     *)
-      (( $EUID )) &&
-        $_msg_error "Please run booster-um as ${R}root${NC}." &&
+      if (( EUID )); then
+        $_msg_error "Please run booster-um as ${R}root${NC}."
         exit 1
+      fi
       ;;
   esac
 
-  # Check booster-um config
-  _check_config
+  # Init booster-um config
+  _init_config
 
   # EFI dir path
   _set_efi_path
@@ -122,6 +123,7 @@ show_version() {
 
 # Source all helper scripts
 for script in /usr/share/booster-um/*; do
+   # shellcheck disable=SC1090
    . "$script"
 done
 

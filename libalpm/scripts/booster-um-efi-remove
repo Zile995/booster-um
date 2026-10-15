@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+# Exit if efistub is not enabled
+source /usr/share/booster-um/config
+if ! _should_create_efi_entry; then exit; fi
+
+# Exit if efibootmgr doesn't exist
+source /usr/share/booster-um/common
+if ! _command_exists efibootmgr; then exit; fi
+
+# Source the main efistub functions
+source /usr/share/booster-um/efistub
+
+# Set efi paths
+_set_efi_path
+
+# Check and remove orphaned entries
+_remove_orphaned_efi_entries

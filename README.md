@@ -86,14 +86,14 @@ During package manager operations, the `booster-um` libalpm hooks automatically 
 ### Visual Reference
 
 - <details>
-    <summary><b>Generation of UKI files (`booster-um -G`)</b></summary>
+    <summary><b>Generation of UKI files (<i>booster-um -G</i>)</b></summary>
 
     ![generation](https://github.com/Zile995/booster-um/assets/32335484/e726f59a-0ab3-4874-bd2b-7a7f28849c3d)
 
   </details>
 
 - <details>
-    <summary><b>Expected `/boot` and `/esp/EFI/LINUX` content</b></summary>
+    <summary><b>Expected <i>/boot</i> and <i>/esp/EFI/LINUX</i> content</b></summary>
 
     ![content](https://github.com/Zile995/booster-um/assets/32335484/1ab07365-3682-4c82-b9dc-3abcb6cf240b)
 

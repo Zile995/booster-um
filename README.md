@@ -20,12 +20,13 @@
 
 * [Dependencies](#dependencies)
 * [Installation](#installation)
-* [Default configuration](#default_config)
-* [Config file](#config_file)
-* [Ukify integration](#ukify_integration)
-* [Secure Boot configuration](#secureboot_configuration)
-* [First run](#first_run)
-* [Usage (help output)](#usage)
+* [Default Configuration](#default_config)
+* [Config File](#config_file)
+* [Ukify Integration](#ukify_integration)
+* [Secure Boot Configuration](#secureboot_configuration)
+* [First Run](#first_run)
+* [Configuration Examples](#configuration_examples)
+* [Usage](#usage)
 
 <h2 name="dependencies">
     Dependencies
@@ -48,7 +49,7 @@
 If you are using an Arch-based distribution, install [booster-um](https://aur.archlinux.org/packages/booster-um) or [booster-um-git](https://aur.archlinux.org/packages/booster-um-git) package from the AUR. After that you are free to remove `mkinitcpio`.
 
 <h2 name="default_config">
-    Default configuration
+    Default Configuration
 </h2>
 
 ### booster-um by default:
@@ -86,10 +87,12 @@ If you are using an Arch-based distribution, install [booster-um](https://aur.ar
     </details>
 
 <h2 name="config_file">
-    Config file
+    Config File
 </h2>
 
 For information about configuration, read [this documentation](https://github.com/Zile995/booster-um/blob/main/config/CONFIG.md).
+
+When specific parameters are omitted or left undefined in the `/etc/booster-um.yaml` configuration file, `booster-um` automatically applies the following default values and resolution orders:
 
 When specific parameters are omitted or left undefined in the `/etc/booster-um.yaml` configuration file, `booster-um` automatically applies the following default values and resolution orders:
 
@@ -108,14 +111,14 @@ When specific parameters are omitted or left undefined in the `/etc/booster-um.y
 | `append_machine_id` | First level | `false` | Appends system machine ID to filename. |
 | `os_id` | First level | Value of `ID` from `/etc/os-release` (e.g., `arch`) | Custom OS identifier prefix for UKI filenames. |
 | `cmdline` | First level | `/etc/kernel/cmdline`, then `/proc/cmdline` | Default kernel command line used by all kernels. |
-| `fallback_cmdline` | First level | `/etc/kernel/cmdline-fallback`, `/etc/kernel/cmdline`, then `/proc/cmdline` | Kernel command line used specifically for fallback images. |
+| `fallback_cmdline` | First level | Config `fallback_cmdline` $\rightarrow$ global `cmdline` $\rightarrow$ `/etc/kernel/cmdline-fallback`, `/etc/kernel/cmdline`, then `/proc/cmdline` | Kernel command line used specifically for fallback images. |
 | `cmdline_per_kernel` | `kernel_config` | `false` | Enables creating a separate command line per kernel. |
 | `share_default_cmdline` | `kernel_config` | `false` | Shares default command line with kernel packages. |
 | `default_initramfs` | `kernel_config` | `[default, fallback]` | Initramfs types configuration for all unspecified kernels. |
 | `default_splash` | `kernel_config` | `/usr/share/systemd/bootctl/splash-arch.bmp` | Default splash picture for all unspecified kernels. |
 | `splash` | `$pkgbase` | Inherits `default_splash` value | Splash picture configuration for an individual kernel. |
 | `cmdline` | `$pkgbase` | Global `cmdline`, `/etc/kernel/$pkgbase-cmdline`, `/etc/kernel/cmdline`, then `/proc/cmdline` | Command line configuration for an individual kernel. |
-| `fallback_cmdline` | `$pkgbase` | `$pkgbase` default, global fallback/cmdline, or `/etc/kernel/$pkgbase-cmdline-fallback`, etc. | Fallback command line configuration for an individual kernel. |
+| `fallback_cmdline` | `$pkgbase` | Inherits global `fallback_cmdline`/`cmdline` or per-kernel files (`/etc/kernel/$pkgbase-cmdline-fallback`, etc.), then `/proc/cmdline` | Fallback command line configuration for an individual kernel. |
 | `initramfs` | `$pkgbase` | Inherits `default_initramfs` value | Initramfs type configuration for an individual kernel. |
 | `os_name` | `efistub_config` | Value of `NAME` from `/etc/os-release` (e.g., `Arch Linux`) | Custom OS display name prefix for EFI boot entry labels. |
 | `append_entries` | `efistub_config` | `true` | Adds newly created EFI entries to the end of the boot order. |
@@ -258,8 +261,147 @@ sudo booster-um -C
 
 > **Reference**: For more details on supported bootloaders, see the [Arch Wiki: Unified Kernel Image](https://wiki.archlinux.org/title/Unified_kernel_image#Booting) guide.
 
+<h2 name="configuration_examples">
+    Configuration Examples
+</h2>
+
+While `/etc/booster-um.yaml` is empty by default, you can customize your boot behavior, command lines, and kernel-specific rules. 
+
+### Example 1: Basic Custom Configuration
+
+This setup demonstrates generating fallback UKI images, setting global/fallback command lines, and applying kernel-specific overrides:
+
+```yaml
+generate_fallback: true
+
+cmdline: >
+  root=LABEL=arch_root
+  rw
+  quiet
+  loglevel=3
+  udev.log_level=3
+
+fallback_cmdline: >
+  root=LABEL=arch_root
+  rw
+  sysrq_always_enabled=1
+
+kernel_config:
+  default_initramfs: [default]
+  linux-lts:
+    splash: false
+    initramfs: [fallback]
+```
+
+#### What this configuration does:
+- **`generate_fallback: true`**: Enables the creation of fallback UKI images.
+- **Global `cmdline` & `fallback_cmdline`**: Defines robust default kernel parameters applied to all default and fallback boots.
+- **`kernel_config`**: 
+  - Sets `default_initramfs: [default]` to build only default initramfs images for all unspecified kernels by default.
+  - Targets `linux-lts` to explicitly disable the boot splash (`splash: false`) and force it to build only a `fallback` initramfs type (`initramfs: [fallback]`).
+
+---
+
+### Example 2: Advanced Configuration with EFISTUB & `systemd-sbsign`
+
+This setup demonstrates delegating Secure Boot signing and TPM2 PCR signatures to `ukify` using `systemd-sbsign`, combined with EFISTUB entry management (assuming the `linux` kernel is installed).
+
+#### 1. `/etc/systemd/ukify.conf`
+```ini
+[UKI]
+SignKernel=true
+SecureBootSigningTool=systemd-sbsign
+SecureBootPrivateKey=/etc/secureboot/keys/db/db.key
+SecureBootCertificate=/etc/secureboot/keys/db/db.crt
+
+[PCRSignature:initrd]
+Phases=enter-initrd
+PCRPrivateKey=/etc/systemd/tpm2-pcr-initrd-private-key.pem
+PCRPublicKey=/etc/systemd/tpm2-pcr-initrd-public-key.pem
+
+[PCRSignature:system]
+Phases=enter-initrd:leave-initrd enter-initrd:leave-initrd:sysinit
+       enter-initrd:leave-initrd:sysinit:ready
+PCRPrivateKey=/etc/systemd/tpm2-pcr-private-key-system.pem
+PCRPublicKey=/etc/systemd/tpm2-pcr-public-key-system.pem
+```
+
+#### 2. `/etc/booster-um.yaml`
+```yaml
+sbsign: true
+
+cmdline: >
+  root=LABEL=arch_root
+  rw
+  quiet
+  loglevel=3
+  udev.log_level=3
+  sysrq_always_enabled=1
+
+kernel_config:
+  default_initramfs: [default]
+  linux-lts:
+    splash: false
+    initramfs: [fallback]
+
+efistub: true
+efistub_config:
+  default_entry: linux
+```
+
+#### What this configuration does:
+- **`sbsign: true`**: Instructs `booster-um` to delegate binary signing directly to `ukify`, which uses `systemd-sbsign` and signs PCR policies for TPM2 auto-unlocking defined in `/etc/systemd/ukify.conf`.
+- **`efistub: true`**: Enables direct UEFI booting without needing a bootloader, setting `linux` as the primary default boot entry (`default_entry: linux`).
+- **Command Line Inheritance for `linux-lts`**: Because a custom cmdline is not defined under the `linux-lts` block, it automatically inherits the global `cmdline `defined at the top level of this configuration.
+
+### Example 3: Dual-Boot Setup (Two Arch Linux Installations)
+
+When dual-booting two installations of the same Linux distribution on a shared EFI System Partition (ESP), file name collisions and duplicate boot labels can occur. This setup demonstrates customizing `os_id`, `os_name`, and appending machine IDs to distinguish each system cleanly.
+
+> Note: If you are using a secondary bootloader like **systemd-boot**, it automatically discovers UKI files from `esp/EFI/Linux` dir. In such cases, it is sufficient to change `os_id`, or enable `append_machine_id` to prevent file conflicts.
+
+```yaml
+os_id: "arch-work"
+
+cmdline: >
+  root=UUID=12345678-1234-1234-1234-123456789abc
+  rw
+  quiet
+
+efistub: true
+efistub_config:
+  os_name: "Arch Linux Workstation"
+  default_entry: linux
+```
+
+#### What this configuration does:
+- **`os_id: "arch-work"`**: Overrides the default `os_id` (`arch`) to use a unique filename prefix, preventing UKI binaries on the shared ESP from overwriting each other (e.g., `/EFI/Linux/arch-work-linux.efi`).
+- **`efistub_config.os_name: "Arch Linux Workstation"`**: Sets a custom display label in the UEFI boot menu (e.g., **Arch Linux Workstation (linux)**), making it easy to distinguish between installations in the boot manager.
+
+### Example 4: Per-Kernel Booster Configuration
+
+You can pass custom parameters directly to `booster` for a specific kernel (such as changing compression options or bundling extra files/binaries) using `booster_config` inside `kernel_config` node:
+
+```yaml
+cmdline: >
+  root=UUID=12345678-1234-1234-1234-123456789abc
+  rw
+  quiet
+
+kernel_config:
+  linux:
+    booster_config: |
+      compression: lz4
+      extra_files: busybox,fsck,fsck.ext4
+```
+
+#### What this configuration does:
+- **`kernel_config.linux.booster_config`**: Injects a custom multi-line booster configuration specifically for the `linux` kernel build.
+- **`compression: lz4`**: Overrides the default initramfs compression method to use `lz4` for `linux`.
+- **`extra_files`**: Explicitly includes required binaries and utilities (`busybox`, `fsck`, `fsck.ext4`) directly inside the generated initramfs for that kernel package.
+
 <h2 name="usage">
-    Usage (help output)
+    Usage
 </h2>
 
 ```Shell

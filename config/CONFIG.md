@@ -118,9 +118,11 @@ fallback_cmdline: "root=LABEL=arch_root rw"
   ```
 Also, you can write kernel parameters in multiple lines inside the cmdline files located in `/etc/kernel`. All sequences of whitespaces (newlines, tabs, spaces) will be replaced with single space.
 
-* `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If the cmdline is not defined here, booster-um will try to use the cmdline from files in this order:
+* `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If cmdline is not defined here, booster-um will try to use the default `cmdline`. If the global `cmdline` is not defined here, booster-um will try to use the cmdline from files in this order:
   * `/etc/kernel/cmdline-fallback` 
   * `/etc/kernel/cmdline` 
+
+  If `$pkgbase` cmdlines are not defined, booster-um will try to use the default cmdlines from the config files
   
     If cmdline is not defined neither in the config nor in the mentioned files, the current cmdline from `/proc/cmdline` will be used
 
@@ -174,12 +176,12 @@ Also, you can write kernel parameters in multiple lines inside the cmdline files
 
     * `splash` a picture to display during boot for the **specified** kernel. To disable splash screen for **specified** kernel pkgbase, simply set this option to `false` or leave it blank. If `splash` is not defined, the `default_splash` option outside the `$pkgbase` node, will be used
 
-    * `cmdline` is the cmdline for the **specified** kernel. This cmdline will be applied if the `cmdline_per_kernel` option is enabled. If cmdline is not defined here, booster-um will try to use the default cmdline in the config file, outside the `kernel_config` node, the `cmdline`. If `cmdline` is not defined here, booster-um will try to use the cmdline from files in this order:
+    * `cmdline` is the cmdline for the **specified** kernel. This cmdline will be applied if the `cmdline_per_kernel` option is enabled. If cmdline is not defined here, booster-um will try to use the default global `cmdline` in the config file, outside the `kernel_config` node. If global `cmdline` is not defined here, booster-um will try to use the cmdline from files in this order:
       * `/etc/kernel/$pkgbase-cmdline` 
       * `/etc/kernel/cmdline` 
       If cmdline doesn't exist neither in the config nor in the mentioned files, booster-um will try to use the current cmdline from `/proc/cmdline`
 
-    * `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If cmdline is not defined here, booster-um will try to use the default cmdline for `$pkgbase`. If `$pkgbase` cmdlines are not defined, booster-um will try to use the default cmdlines from the config files, outside the `kernel_config` node (first `fallback_cmdline`, then `cmdline`). If these cmdlines are not defined in the booster-um config file, booster-um will try to use the cmdline from files in this order:
+    * `fallback_cmdline` is same as `cmdline` but for fallback kernel images. If cmdline is not defined here, booster-um will try to use the default cmdline for `$pkgbase`. If `$pkgbase` cmdlines are not defined, booster-um will try to use the default global cmdlines from the config files, outside the `kernel_config` node (first `fallback_cmdline`, then `cmdline`). If these cmdlines are not defined in the booster-um config file, booster-um will try to use the cmdline from files in this order:
       * `/etc/kernel/$pkgbase-cmdline-fallback` 
       * `/etc/kernel/$pkgbase-cmdline` 
       * `/etc/kernel/cmdline-fallback` 

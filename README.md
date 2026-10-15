@@ -134,6 +134,8 @@ When specific parameters are omitted or left undefined in the `/etc/booster-um.y
 | `os_name` | `efistub_config` | Value of `NAME` from `/etc/os-release` (e.g., `Arch Linux`) | Custom OS display name prefix for EFI boot entry labels. |
 | `append_entries` | `efistub_config` | `true` | Adds newly created EFI entries to the end of the boot order. |
 
+> **Note:** `$pkgbase` = kernel package name
+
 <h2 name="ukify_integration">
     Ukify integration
 </h2>

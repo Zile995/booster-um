@@ -121,15 +121,15 @@ When specific parameters are omitted or left undefined in the `/etc/booster-um.y
 | `generate_fallback` | First level | `false` | Manages creation of fallback UKI files. |
 | `append_machine_id` | First level | `false` | Appends system machine ID to filename. |
 | `os_id` | First level | Value of `ID` from `/etc/os-release` (e.g., `arch`) | Custom OS identifier prefix for UKI filenames. |
-| `cmdline` | First level | `/etc/kernel/cmdline`, then `/proc/cmdline` | Default kernel command line used by all kernels. |
-| `fallback_cmdline` | First level | Config `fallback_cmdline` $\rightarrow$ global `cmdline` $\rightarrow$ `/etc/kernel/cmdline-fallback`, `/etc/kernel/cmdline`, then `/proc/cmdline` | Kernel command line used specifically for fallback images. |
-| `cmdline_per_kernel` | `kernel_config` | `false` | Enables creating a separate command line per kernel. |
+| `cmdline` | First level | `/etc/kernel/cmdline` &rarr; Current command line `/proc/cmdline` | Default kernel command line used by all kernels. |
+| `fallback_cmdline` | First level | If **unspecified**: Global `cmdline` &rarr; `/etc/kernel/cmdline-fallback` &rarr; `/etc/kernel/cmdline` &rarr; `/proc/cmdline` | Kernel command line used specifically for fallback images. |
+| `cmdline_per_kernel` | `kernel_config` | `false` | Enables setting a custom cmdline for each kernel. |
 | `share_default_cmdline` | `kernel_config` | `false` | Shares default command line with kernel packages. |
 | `default_initramfs` | `kernel_config` | `[default, fallback]` | Initramfs types configuration for all unspecified kernels. |
 | `default_splash` | `kernel_config` | `/usr/share/systemd/bootctl/splash-arch.bmp` | Default splash picture for all unspecified kernels. |
 | `splash` | `$pkgbase` | Inherits `default_splash` value | Splash picture configuration for an individual kernel. |
-| `cmdline` | `$pkgbase` | Global `cmdline`, `/etc/kernel/$pkgbase-cmdline`, `/etc/kernel/cmdline`, then `/proc/cmdline` | Command line configuration for an individual kernel. |
-| `fallback_cmdline` | `$pkgbase` | Inherits global `fallback_cmdline`/`cmdline` or per-kernel files (`/etc/kernel/$pkgbase-cmdline-fallback`, etc.), then `/proc/cmdline` | Fallback command line configuration for an individual kernel. |
+| `cmdline` | `$pkgbase` | If **unspecified**: Global `cmdline` &rarr; `/etc/kernel/$pkgbase-cmdline` &rarr; `/etc/kernel/cmdline` &rarr; Current command line `/proc/cmdline` | Command line configuration for an individual kernel. |
+| `fallback_cmdline` | `$pkgbase` | If **unspecified**: `$pkgbase cmdline` &rarr; Global `fallback_cmdline` &rarr; Global `cmdline` &rarr; Per-kernel files (`/etc/kernel/$pkgbase-cmdline-fallback` &rarr; `/etc/kernel/$pkgbase-cmdline` ) &rarr; Current command line `/proc/cmdline` | Fallback command line configuration for an individual kernel. |
 | `initramfs` | `$pkgbase` | Inherits `default_initramfs` value | Initramfs type configuration for an individual kernel. |
 | `os_name` | `efistub_config` | Value of `NAME` from `/etc/os-release` (e.g., `Arch Linux`) | Custom OS display name prefix for EFI boot entry labels. |
 | `append_entries` | `efistub_config` | `true` | Adds newly created EFI entries to the end of the boot order. |
@@ -367,6 +367,8 @@ efistub_config:
 - **`efistub: true`**: Enables direct UEFI booting without needing a bootloader, setting `linux` as the primary default boot entry (`default_entry: linux`).
 - **Command Line Inheritance for `linux-lts`**: Because a custom cmdline is not defined under the `linux-lts` block, it automatically inherits the global `cmdline `defined at the top level of this configuration.
 
+---
+
 ### Example 3: Dual-Boot Setup (Two Arch Linux Installations)
 
 When dual-booting two installations of the same Linux distribution on a shared EFI System Partition (ESP), file name collisions and duplicate boot labels can occur. This setup demonstrates customizing `os_id`, `os_name`, and appending machine IDs to distinguish each system cleanly.
@@ -391,6 +393,8 @@ efistub_config:
 - **`os_id: "arch-work"`**: Overrides the default `os_id` (`arch`) to use a unique filename prefix, preventing UKI binaries on the shared ESP from overwriting each other (e.g., `/EFI/Linux/arch-work-linux.efi`).
 - **`efistub_config.os_name: "Arch Linux Workstation"`**: Sets a custom display label in the UEFI boot menu (e.g., **Arch Linux Workstation (linux)**), making it easy to distinguish between installations in the boot manager.
 
+---
+
 ### Example 4: Per-Kernel Booster Configuration
 
 You can pass custom parameters directly to `booster` for a specific kernel (such as changing compression options or bundling extra files/binaries) using `booster_config` inside `kernel_config` node:
@@ -412,6 +416,47 @@ kernel_config:
 - **`kernel_config.linux.booster_config`**: Injects a custom multi-line booster configuration specifically for the `linux` kernel build.
 - **`compression: lz4`**: Overrides the default initramfs compression method to use `lz4` for `linux`.
 - **`extra_files`**: Explicitly includes required binaries and utilities (`busybox`, `fsck`, `fsck.ext4`) directly inside the generated initramfs for that kernel package.
+
+___
+
+### Example 5: Per-Kernel Command Line Configuration
+
+This setup demonstrates how to enable individual command-line options per kernel while sharing common boot parameters across all kernels using `share_default_cmdline`.
+
+```yaml
+generate_fallback: true
+
+cmdline: "root=UUID=12345678-1234-1234-1234-123456789abc rw"
+
+kernel_config:
+  cmdline_per_kernel: true
+  share_default_cmdline: true
+  default_initramfs: [default]
+  linux:
+    cmdline: >
+      quiet
+      loglevel=3 udev.log_level=3
+      zswap.enabled=0
+  linux-lts:
+    splash: false
+    cmdline: "sysrq_always_enabled=1"
+    initramfs: [fallback]
+```
+
+#### What this configuration does:
+- **`cmdline_per_kernel: true`**: Enables defining separate `cmdline` parameters for individual kernels under their respective `pkgbase` nodes inside `kernel_config`.
+- **`share_default_cmdline: true`**: Appends the specific kernel's `cmdline` to the global `cmdline` (`root=UUID=12345678-1234-1234-1234-123456789abc rw`), preventing the need to repeat basic parameters across multiple kernel definitions.
+- **`linux`**: Combines the global `cmdline` with **kernel-specific** `cmdline` (`quiet loglevel=3 udev.log_level=3 zswap.enabled=0`).
+- **`linux-lts`**: Appends `sysrq_always_enabled=1` to the **global** `cmdline`, disables the boot splash (`splash: false`), and builds only the `fallback` initramfs image (`initramfs: [fallback]`).
+
+#### Resulting Command Lines in this Example:
+ - `linux` **(default initramfs)**:
+    `root=LABEL=arch_root ro quiet loglevel=3 udev.log_level=3 zswap.enabled=0`
+ - `linux-lts` **(fallback initramfs)**:
+    `root=LABEL=arch_root ro sysrq_always_enabled=1`
+
+> **Note on Command Line Resolution in this Example**: 
+> For `linux-lts` (which builds a `fallback` initramfs), `booster-um` first checks for a kernel-specific `fallback_cmdline`. Since `fallback_cmdline` is not defined under `linux-lts` in this example, it directly uses its kernel-specific `cmdline` (`sysrq_always_enabled=1`). Had this not been defined either, it would have fallen back to checking the global configuration—first for a global `fallback_cmdline`, and if absent, the global `cmdline`.
 
 <h2 name="usage">
     Usage

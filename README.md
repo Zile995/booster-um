@@ -185,7 +185,7 @@ When `sbsign: true` is enabled, key paths and signing preferences are configured
 
 * **Using `sbsign`** (Requires `sbsigntools` package):
   ```ini
-  [Sign]
+  [UKI]
   SecureBootPrivateKey=/etc/secureboot/keys/db/db.key
   SecureBootCertificate=/etc/secureboot/keys/db/db.crt
   ```
@@ -193,7 +193,7 @@ When `sbsign: true` is enabled, key paths and signing preferences are configured
 * **Using `systemd-sbsign`** (No extra packages required):
   If `sbsigntools` is not installed, you can specify `systemd-sbsign` as the signing tool:
   ```ini
-  [Sign]
+  [UKI]
   SignKernel=yes
   SecureBootSigningTool=systemd-sbsign
   SecureBootPrivateKey=/etc/secureboot/keys/db/db.key

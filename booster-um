@@ -7,7 +7,7 @@
 set -e
 
 # Define the booster-um version
-declare -g VERSION="2.0.0"
+declare -g VERSION="2.0.1"
 
 main() {
   local arg="$1"

@@ -51,7 +51,8 @@ _get_cmdline_from_file() {
   #read -r default_cmdline < "$default_cmdline_path"
 
   # Replace sequences of spaces, newlines and tabs with single space. 
-  local default_cmdline=$(tr -s '[:space:]' ' ' < "$default_cmdline_path" | sed 's/^ *//; s/ *$//')
+  local default_cmdline
+  default_cmdline=$(tr -s '[:space:]' ' ' < "$default_cmdline_path" | sed 's/^ *//; s/ *$//')
 
   echo "$default_cmdline"
 }
@@ -108,11 +109,13 @@ _get_cmdline() {
   # If cmdline per kernel is enabled, create the cmdline string
   if _cmdline_per_kernel; then
     # Get the pkgbase cmdline
-    local pkgbase_cmdline="$(_get_pkgbase_cmdline "$pkgbase" "$fallback")"
+    local pkgbase_cmdline
+    pkgbase_cmdline="$(_get_pkgbase_cmdline "$pkgbase" "$fallback")"
 
     # Concatenate the default and pkgbase cmdline strings
     if _should_share_default_cmdline; then
-      local default_cmdline="$(_get_default_cmdline "$fallback" "$pkgbase")"
+      local default_cmdline
+      default_cmdline="$(_get_default_cmdline "$fallback" "$pkgbase")"
       cmdline="${default_cmdline:+$default_cmdline }${pkgbase_cmdline}"
       cmdline="${cmdline%% }"
     else

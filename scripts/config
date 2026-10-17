@@ -42,7 +42,7 @@ _init_config() {
 # Checks if sbsign is enabled
 _is_sbsign_enabled() {
   [[ -z $sbsign ]] || return "$sbsign"
-  if ! _is_config_valid || ! _has_config_parameter "sbsign"; then
+  if ! _is_config_valid || ! _has_config_parameter "." "sbsign"; then
     sbsign=1; return 1
   fi
   _is_enabled_parameter "sbsign"; sbsign=$?; return "$sbsign"
@@ -50,8 +50,9 @@ _is_sbsign_enabled() {
 
 # Checks if config has parameter
 _has_config_parameter() {
-  local parameter="$1"
-  yq -e ". | has(\"${parameter}\")" "$CONFIG" &> /dev/null
+  local path="$1"
+  local parameter="$2"
+  yq -e "${path} | has(\"${parameter}\")" "$CONFIG" &> /dev/null
 }
 
 # Checks if parameter is enabled
@@ -68,7 +69,7 @@ _is_config_valid() {
 # Checks if colors are enabled
 _should_enable_colors() {
   [[ -z $colors ]] || return "$colors"
-  if ! _is_config_valid || ! _has_config_parameter "colors"; then
+  if ! _is_config_valid || ! _has_config_parameter "." "colors"; then
     colors=0; return 0
   fi
   _is_enabled_parameter "colors"; colors=$?; return "$colors"
@@ -77,7 +78,7 @@ _should_enable_colors() {
 # Checks if the verbose parameter is enabled for the booster initramfs generator
 _verbose() {
   [[ -z $verbose ]] || return "$verbose"
-  if ! _is_config_valid || ! _has_config_parameter "verbose"; then
+  if ! _is_config_valid || ! _has_config_parameter "." "verbose"; then
     verbose=1; return 1
   fi
   _is_enabled_parameter "verbose"; verbose=$?; return "$verbose"
@@ -87,7 +88,7 @@ _verbose() {
 # Booster should generate initramfs one by one (not in parallel)
 _low_memory() {
   [[ -z $low_memory ]] || return "$low_memory"
-  if ! _is_config_valid || ! _has_config_parameter "low_memory" || _verbose; then
+  if ! _is_config_valid || ! _has_config_parameter "." "low_memory" || _verbose; then
     low_memory=1; return 1
   fi
   _is_enabled_parameter "low_memory"; low_memory=$?; return "$low_memory"
@@ -96,7 +97,7 @@ _low_memory() {
 # Checks if booster-um should include microcode files.
 _include_microcode() {
   [[ -z $microcode ]] || return "$microcode"
-  if ! _is_config_valid || ! _has_config_parameter "microcode"; then
+  if ! _is_config_valid || ! _has_config_parameter "." "microcode"; then
     microcode=0; return 0
   fi
   _is_enabled_parameter "microcode"; microcode=$?; return "$microcode"
@@ -110,7 +111,7 @@ _is_universal() {
 # Checks if the splash should be enabled
 _should_enable_splash() {
   [[ -z $enable_splash ]] || return "$enable_splash"
-  if ! _is_config_valid || ! _has_config_parameter "enable_splash"; then
+  if ! _is_config_valid || ! _has_config_parameter "." "enable_splash"; then
     enable_splash=0; return 0
   fi
   _is_enabled_parameter "enable_splash"; enable_splash=$?; return "$enable_splash"
@@ -120,7 +121,7 @@ _should_enable_splash() {
 # The booster-um config has higher priority and overrides main booster configuration
 _should_generate_fallback() {
   [[ -z $generate_fallback ]] || return "$generate_fallback"
-  if _is_config_valid && _has_config_parameter "generate_fallback"; then
+  if _is_config_valid && _has_config_parameter "." "generate_fallback"; then
     _is_enabled_parameter "generate_fallback"
   else
     _is_universal
@@ -132,7 +133,7 @@ _should_generate_fallback() {
 # Checks if the booster-um should always sign generated UKI
 _should_sign_uki() {
   [[ -z $sign_uki ]] || return "$sign_uki"
-  if ! _is_config_valid || ! _has_config_parameter "sign_uki"; then
+  if ! _is_config_valid || ! _has_config_parameter "." "sign_uki"; then
     sign_uki=0; return 0
   fi
   _is_enabled_parameter "sign_uki"; sign_uki=$?; return "$sign_uki"
@@ -141,7 +142,7 @@ _should_sign_uki() {
 # Checks if the booster-um should remove leftovers (vmlinuz and initramfs)
 _should_remove_leftovers() {
   [[ -z $remove_leftovers ]] || return "$remove_leftovers"
-  if ! _is_config_valid || ! _has_config_parameter "remove_leftovers"; then
+  if ! _is_config_valid || ! _has_config_parameter "." "remove_leftovers"; then
     remove_leftovers=0; return 0
   fi
   _is_enabled_parameter "remove_leftovers"; remove_leftovers=$?; return "$remove_leftovers"
@@ -150,7 +151,7 @@ _should_remove_leftovers() {
 # Checks if the booster-um should create EFI entry
 _should_append_machine_id() {
   [[ -z $append_machine_id ]] || return "$append_machine_id"
-  if ! _is_config_valid || ! _has_config_parameter "append_machine_id"; then
+  if ! _is_config_valid || ! _has_config_parameter "." "append_machine_id"; then
     append_machine_id=1; return 1
   fi
   _is_enabled_parameter "append_machine_id"; append_machine_id=$?; return "$append_machine_id"
@@ -159,7 +160,7 @@ _should_append_machine_id() {
 # Checks if the booster-um should create EFI entry
 _should_create_efi_entry() {
   [[ -z $efistub ]] || return "$efistub"
-  if ! _is_config_valid || ! _has_config_parameter "efistub"; then
+  if ! _is_config_valid || ! _has_config_parameter "." "efistub"; then
     efistub=1; return 1
   fi
   _is_enabled_parameter "efistub"; efistub=$?; return "$efistub"
@@ -168,10 +169,10 @@ _should_create_efi_entry() {
 # Checks if the booster-um should append EFI entries to the boot order
 _should_append_entries() {
   [[ -z $append_entries ]] || return "$append_entries"
-  if ! _is_config_valid || ! _has_config_parameter "append_entries"; then
+  if ! _is_config_valid || ! _has_config_parameter ".efistub_config" "append_entries"; then
     append_entries=0; return 0
   fi
-  _is_enabled_parameter "append_entries"; append_entries=$?; return "$append_entries"
+  _is_enabled_parameter "efistub_config.append_entries"; append_entries=$?; return "$append_entries"
 }
 
 # Returns the default EFI entry
@@ -231,7 +232,7 @@ _get_config_pkgbase_cmdline() {
 
   config_pkgbase_cmdline="$(yq ".kernel_config.${pkgbase}.${config_cmdline_name}" "$CONFIG")"
   
-  if [[ $fallback -eq 0 && -z "${config_pkgbase_cmdline// }" ]]; then
+  if [[ $fallback -eq 0 && -z "${config_pkgbase_cmdline// }" ]] || [[ $config_pkgbase_cmdline == null ]]; then
     config_pkgbase_cmdline="$(yq ".kernel_config.${pkgbase}.cmdline" "$CONFIG")"
   fi
   
@@ -243,19 +244,19 @@ _get_config_pkgbase_cmdline() {
 # Checks if the default cmdline should be shared with the pkgbase cmdlines
 _should_share_default_cmdline() {
   [[ -z $share_default_cmdline ]] || return "$share_default_cmdline"
-  if ! _is_config_valid || ! _has_config_parameter "share_default_cmdline"; then
+  if ! _is_config_valid || ! _has_config_parameter ".kernel_config" "share_default_cmdline"; then
     share_default_cmdline=1; return 1
   fi
-  _is_enabled_parameter "share_default_cmdline"; share_default_cmdline=$?; return "$share_default_cmdline"
+  _is_enabled_parameter "kernel_config.share_default_cmdline"; share_default_cmdline=$?; return "$share_default_cmdline"
 }
 
 # Checks if the booster-um should create cmdline per kernel
 _cmdline_per_kernel() {
   [[ -z $cmdline_per_kernel ]] || return "$cmdline_per_kernel"
-  if ! _is_config_valid || ! _has_config_parameter "cmdline_per_kernel"; then
+  if ! _is_config_valid || ! _has_config_parameter ".kernel_config" "cmdline_per_kernel"; then
     cmdline_per_kernel=1; return 1
   fi
-  _is_enabled_parameter "cmdline_per_kernel"; cmdline_per_kernel=$?; return "$cmdline_per_kernel"
+  _is_enabled_parameter "kernel_config.cmdline_per_kernel"; cmdline_per_kernel=$?; return "$cmdline_per_kernel"
 }
 
 # Returns the pkgbase booster config

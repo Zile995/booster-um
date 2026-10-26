@@ -122,14 +122,14 @@ When specific parameters are omitted or left undefined in the `/etc/booster-um.y
 | `append_machine_id` | First level | `false` | Appends system machine ID to filename. |
 | `os_id` | First level | Value of `ID` from `/etc/os-release` (e.g., `arch`) | Custom OS identifier prefix for UKI filenames. |
 | `cmdline` | First level | If **unspecified**: `/etc/kernel/cmdline` &rarr; Current command line `/proc/cmdline` | Default kernel command line used by all kernels. |
-| `fallback_cmdline` | First level | If **unspecified**: Global `cmdline` &rarr; `/etc/kernel/cmdline-fallback` &rarr; `/etc/kernel/cmdline` &rarr; `/proc/cmdline` | Kernel command line used specifically for fallback images. |
+| `fallback_cmdline` | First level | If **unspecified**: Global `cmdline` &rarr; `/etc/kernel/cmdline-fallback` &rarr; `/etc/kernel/cmdline` &rarr; Current command line `/proc/cmdline` | Kernel command line used specifically for fallback images. |
 | `cmdline_per_kernel` | `kernel_config` | `false` | Enables setting a custom cmdline for each kernel. |
 | `share_default_cmdline` | `kernel_config` | `false` | Shares default command line with kernel packages. |
 | `default_initramfs` | `kernel_config` | `[default, fallback]` | Initramfs types configuration for all unspecified kernels. |
 | `default_splash` | `kernel_config` | `/usr/share/systemd/bootctl/splash-arch.bmp` | Default splash picture for all unspecified kernels. |
 | `splash` | `$pkgbase` | Inherits `default_splash` value | Splash picture configuration for an individual kernel. |
 | `cmdline` | `$pkgbase` | If **unspecified**: Global `cmdline` &rarr; `/etc/kernel/$pkgbase-cmdline` &rarr; `/etc/kernel/cmdline` &rarr; Current command line `/proc/cmdline` | Command line configuration for an individual kernel. |
-| `fallback_cmdline` | `$pkgbase` | If **unspecified**: `$pkgbase cmdline` &rarr; Global `fallback_cmdline` &rarr; Global `cmdline` &rarr; Per-kernel files (`/etc/kernel/$pkgbase-cmdline-fallback` &rarr; `/etc/kernel/$pkgbase-cmdline` ) &rarr; Current command line `/proc/cmdline` | Fallback command line configuration for an individual kernel. |
+| `fallback_cmdline` | `$pkgbase` | If **unspecified**: `$pkgbase cmdline` &rarr; Global `fallback_cmdline` &rarr; Global `cmdline` &rarr; Per-kernel files (`/etc/kernel/$pkgbase-cmdline-fallback` &rarr; `/etc/kernel/$pkgbase-cmdline` &rarr; `/etc/kernel/cmdline-fallback` &rarr; `/etc/kernel/cmdline`) &rarr; Current command line `/proc/cmdline` | Fallback command line configuration for an individual kernel. |
 | `initramfs` | `$pkgbase` | Inherits `default_initramfs` value | Initramfs type configuration for an individual kernel. |
 | `os_name` | `efistub_config` | Value of `NAME` from `/etc/os-release` (e.g., `Arch Linux`) | Custom OS display name prefix for EFI boot entry labels. |
 | `append_entries` | `efistub_config` | `true` | Adds newly created EFI entries to the end of the boot order. |

@@ -121,7 +121,7 @@ When specific parameters are omitted or left undefined in the `/etc/booster-um.y
 | `generate_fallback` | First level | `false` | Manages creation of fallback UKI files. |
 | `append_machine_id` | First level | `false` | Appends system machine ID to filename. |
 | `os_id` | First level | Value of `ID` from `/etc/os-release` (e.g., `arch`) | Custom OS identifier prefix for UKI filenames. |
-| `cmdline` | First level | `/etc/kernel/cmdline` &rarr; Current command line `/proc/cmdline` | Default kernel command line used by all kernels. |
+| `cmdline` | First level | If **unspecified**: `/etc/kernel/cmdline` &rarr; Current command line `/proc/cmdline` | Default kernel command line used by all kernels. |
 | `fallback_cmdline` | First level | If **unspecified**: Global `cmdline` &rarr; `/etc/kernel/cmdline-fallback` &rarr; `/etc/kernel/cmdline` &rarr; `/proc/cmdline` | Kernel command line used specifically for fallback images. |
 | `cmdline_per_kernel` | `kernel_config` | `false` | Enables setting a custom cmdline for each kernel. |
 | `share_default_cmdline` | `kernel_config` | `false` | Shares default command line with kernel packages. |
@@ -137,7 +137,7 @@ When specific parameters are omitted or left undefined in the `/etc/booster-um.y
 > **Note:** `$pkgbase` = kernel package name
 
 <h2 name="ukify_integration">
-    Ukify integration
+    Ukify Integration
 </h2>
 
 `booster-um` uses systemd's `ukify` under the hood to assemble UKI binaries. `ukify` automatically reads its default configuration file from `/etc/systemd/ukify.conf` if it exists.
@@ -194,7 +194,7 @@ When `sbsign: true` is enabled, key paths and signing preferences are configured
   If `sbsigntools` is not installed, you can specify `systemd-sbsign` as the signing tool:
   ```ini
   [UKI]
-  SignKernel=yes
+  SignKernel=true
   SecureBootSigningTool=systemd-sbsign
   SecureBootPrivateKey=/etc/secureboot/keys/db/db.key
   SecureBootCertificate=/etc/secureboot/keys/db/db.crt
@@ -239,7 +239,8 @@ Edit `/etc/booster-um.yaml` according to your boot requirements. If left empty, 
 - **EFISTUB Booting**: If you intend to boot directly via UEFI without a bootloader, enable EFISTUB:
   ```yaml
   efistub: true
-  default_entry: "linux"  # Set default kernel package to boot into
+  efistub_config:
+    default_entry: "linux"  # Set default kernel package to boot into
   ```
 
 - **Secure Boot Setup**:

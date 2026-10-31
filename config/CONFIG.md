@@ -159,7 +159,7 @@ Also, you can write kernel parameters in multiple lines inside the cmdline files
   * `default_initramfs` array provides initramfs type configuration for all other unspecified kernels. You can specify up to two types, `default` and `fallback`. If not defined, its values ​​will be `default` and `fallback`.
     > **Note**: If you specified `fallback` type, you must enable `generate_fallback`, otherwise it will generate `default` images only. If you enabled `universal` parameter inside the booster config file (`/etc/booster.yaml`), booster-um will only create `fallback` images.
  
-  * `default_splash` a picture to display during boot. This is the default splash for all **unspecified** kernels under `kernel_config` node. The argument is a path to a **BMP** file. The default `/usr/share/systemd/bootctl/splash-arch.bmp` picture will be used if this path is invalid or not specified. To disable splash screen for all **unspecified pkgbases** under `kernel_config` node, simply set this option to `false` or leave it blank, for example:
+  * `default_splash` a picture to display during boot. This is the default splash for all kernels. The argument is a path to a **BMP** file. The default `/usr/share/systemd/bootctl/splash-arch.bmp` picture will be used if this path is invalid, or not specified. To disable splash screen for all **unspecified pkgbases** under `kernel_config` node, simply set this option to `false` or leave it blank, for example:
     ```YAML
       # valid options
       kernel_config:
@@ -168,6 +168,7 @@ Also, you can write kernel parameters in multiple lines inside the cmdline files
         default_splash: ""
         default_splash: false
     ```
+    > **Note**: Disabling this global option does not completely remove the ability to use a splash image, as you can still define a custom picture for specific kernels using the `splash` option per kernel.
 
   * `pkgbase` (kernel package name, below as `$pkgbase`) node provides additional configuration for **specified** kernel package name:
 
